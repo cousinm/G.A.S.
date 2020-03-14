@@ -2,15 +2,15 @@
 # COUSIN Morgane
 #
 # PATH ---------------------------------------------------------------------
-input_path                   =../libraries                                                                  ! LIBRARIES INPUT PATH                   
-tree_input_path              =/media/morgane/data1/Horizon/wmap-5/input/oversampling_linked_trees           ! INPUT       
-output_path                  =/media/morgane/data2/Horizon/wmap-5/output/kalonegezh_runs/test/stripping     ! OUTPUT  
+input_path                   =../libraries        ! LIBRARIES INPUT PATH                   
+tree_input_path              =                    ! INPUT       
+output_path                  =                    ! OUTPUT  
 #
 # TREE CLEAN ---------------------------------------------------------------                                                         
 Energy_threshold             = 1.0          ! default value = 1.0
-nb_of_desc_halo_test         = 3	    ! default value = 3  , if = 0 no halo can be saved !!
+nb_of_desc_halo_test         = 3	        ! default value = 3  , if = 0 no halo can be saved !!
 min_dm_goodness_of_branch    = 0.5          ! default value = 0.5, if = 1.0 no halo can be saved
-min_halo_goodness_of_branch  = 0.5	    ! default value = 0.5, if = 1.0 no halo can be saved
+min_halo_goodness_of_branch  = 0.5	        ! default value = 0.5, if = 1.0 no halo can be saved
 #
 # BARYON -------------------------------------------------------------------
 physical_precision           = 0.4          ! (default value = 0.4 40% effective in the model 20%)

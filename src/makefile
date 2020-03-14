@@ -1,6 +1,6 @@
-# Makefile for GalaxyMaker
+# Makefile for G.A.S. MPI version
 
-N_PROC = 3
+N_PROC = 4
 
 LIBDIR         = ./lib/
 MAINDIR        = ./main/
