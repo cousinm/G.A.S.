@@ -1,0 +1,37 @@
+# GAS parameters input file 
+# COUSIN Morgane
+#
+# PATH ---------------------------------------------------------------------
+input_path                   =../libraries        ! LIBRARIES INPUT PATH                   
+tree_input_path              =                    ! INPUT       
+output_path                  =                    ! OUTPUT  
+#
+# TREE CLEAN ---------------------------------------------------------------                                                         
+Energy_threshold             = 1.0          ! default value = 1.0
+nb_of_desc_halo_test         = 3	        ! default value = 3  , if = 0 no halo can be saved !!
+min_dm_goodness_of_branch    = 0.5          ! default value = 0.5, if = 1.0 no halo can be saved
+min_halo_goodness_of_branch  = 0.5	        ! default value = 0.5, if = 1.0 no halo can be saved
+#
+# BARYON -------------------------------------------------------------------
+physical_precision           = 0.4          ! (default value = 0.4 40% effective in the model 20%)
+#
+# BACKGROUND --------------------------------------	
+z_reion                      = 7.0          ! redshift of reionization
+#
+# ACCRETION PARAMETERS ----------------------------
+cold_stream_efficiency       = 1.0          ! > 0 if cold stream in free-fall, 0 otherwise, (default value = 0.5)
+cooling_efficiency           = 1.0          ! > 0 if cooling, 0 otherwise, (default value = 1.0)
+TI_efficiency                = 0.63
+# GALAXY ------------------------------------------
+epsilon_merge                = 0.333        ! critical mass ratio that separates major and minor mergers
+#
+# STARS -----------------------------------
+IMF                          = Chabrier+03  ! Initial mass function (Salpeter+55, Chabrier+03, Kroupa+93, Scalo+98)
+#
+# DISC ------------------------------------
+disc_stripping_efficiency    = 1.0          ! efficiency of the stripping process acting on the diffuse gas phase (default value 1.0)
+disc_ejecta_efficiency       = 0.2          ! fraction of the kinetic energy affected to the creation of a large scale wind
+# AGN -------------------------------------
+agn_ejecta_efficiency        = 1.0
+M_BH_min                     = 300.         ! initial SMBH mass
+agn_gas_coupling             = 1.0          ! gas coupling between agn jet and gas content

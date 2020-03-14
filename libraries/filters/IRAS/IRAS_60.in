@@ -1,0 +1,32 @@
+# New G.A.S. format
+# filter of IRAS 60 micron
+# After the "START" signal, the file is bild as follow:
+# File name
+# nwave: number of wavelenght
+# center wavelenght [micron]
+# and for l=1 to nwave, lambda [micron] | transmission [without unit]
+START
+IRAS_60
+21
+60.0
+27.000  0.000 
+30.000  0.010 
+33.000  0.036 
+36.000  0.068 
+39.000  0.174 
+42.000  0.315 
+45.000  0.483 
+48.000  0.585 
+51.000  0.658 
+54.000  0.716 
+57.000  0.824 
+60.000  0.915 
+63.000  0.987 
+66.000  0.990 
+69.000  1.000 
+72.000  0.946 
+75.000  0.713 
+78.000  0.531 
+81.000  0.174 
+84.000  0.047 
+87.000  0.000 
