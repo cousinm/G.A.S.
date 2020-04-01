@@ -1,7 +1,7 @@
 # New G.A.S. format
 # In this file, each line of the header is starting by #
 #    data are saved after the keyword START
-# Gas emptying timescale, computed from inertial cascade
+# Cascade formation timescale
 # 
 # This data file is build as follow:
 # a b
@@ -11,7 +11,7 @@
 # List of Accretion rates (in log) [Msun/yr]  : AccRateBins
 # List of disc scale (in log) [kpc] : DiscScaleBins
 # A blank line starting with # 
-# And for each following data line (i: nAccRateBins index): log(t_empt)(i,1:nDiscScaleBins) in Gyr
+# And for each following data line (i: nAccRateBins index): log(t_form)(i,1:nDiscScaleBins) in Gyr
 START
 0.2  0.6
 0.0001  0.30681  0.0015

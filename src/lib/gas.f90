@@ -17,9 +17,9 @@ module gas
   !
   !  gas_read_gas_properties           : Read gas properties (Metallicity bins, Initial abundances etc ...)
   !
-  !  gas_read_emptying_timescale       : Read the gas emptying time scale table
+  !  gas_read_emptying_timescale       : Read the gas emptying timescale table
   !
-  !  gas_read_ngc_table                : Read the N Giant Clouds Table
+  !  gas_read_formation_timescale      : Read the gas formation timescale table
   !
   !  gas_set_reference_mass            : Initialize gas reference mass : M_gas_min
   !
@@ -163,10 +163,11 @@ module gas
   real(kind=8),allocatable       :: MetBins(:)       ! mass fraction corresponding to metallicity steps
   real(kind=8),allocatable       :: AccRateBins(:)   ! List of Accretion rates available for turbulent cascade models
   real(kind=8),allocatable       :: DiscScaleBins(:) ! List of disc scale height available for turbulence cascade models
-  real(kind=8),allocatable       :: ngc_table(:,:)   ! number of giant cloud formed in the intertial turbulent cascade (first dim: acc rate, second dim: disc scale)
   real(kind=8),allocatable       :: t_str(:,:)       ! gas structuration timescale (first dim: acc rate, second dim: disc scale)
   real(kind=8)                   :: t_str_max        ! maximum value of the gas structuration timescale
-   
+  real(kind=8),allocatable       :: t_form(:,:)      ! cascade formation timescale (first dim: acc rate, second dim: disc scale)
+  real(kind=8)                   :: t_form_max       ! maximum value of the gas cascade formation timescale
+
   type(gas_type),allocatable     :: InitAbund(:)     ! Initial abundances (mass fraction) associated to each metallicity bin
                                                      ! InitAbund is defined as a gas object therefore InitAbund[Z]%mass = 1., InitAbund[Z]%mZ = metBins(Z) 
                                                      ! and for each main ISM elements InitAbund[Z]%elts(e) = X0_elt   
@@ -176,13 +177,13 @@ module gas
   real(kind=8),parameter         :: adiab_ind                = 1.4d0
   real(kind=8),parameter         :: large_scale_min_surf_den = 1.0d1/mass_code_unit_in_M_Sun*(1.e3)**2. ! star formation mass surface density threshold 
                                                                                                         ! 10 Msun/pc converted in code unit 10^11Msun/kpc**2.  
-  real(kind=4),parameter         :: larson_mu_slope          = 1./5.                                    ! column density power law slope
-  real(kind=4),parameter         :: larson_sig_slope         = 3./5.                                    ! velocity dispersion power law slope
-  real(kind=8),parameter         :: l_star                   = 1.d-1/1.d3                               ! star forming filament size 0.1pc 
-  real(kind=8),parameter         :: k_star                   = 1.d0/l_star                              ! associated wavelenght                    
-  real(kind=8),parameter         :: sig_star                 = 5.d-1/vel_code_unit_2_kmPerSec           ! velocity dispersion threshold    
-  real(kind=8),parameter         :: mu_star                  = 1.5d2/mass_code_unit_in_M_Sun*(1.e3)**2. ! column density threshold 
-                                                                                                        ! 150 Msun/pc converted in code unit 10^11Msun/kpc**2.                                                                                                                                                                                                                                                                                                          
+  real(kind=4)                   :: larson_mu_slope          ! column density power law slope
+  real(kind=4)                   :: larson_sig_slope         ! velocity dispersion power law slope
+  real(kind=8)                   :: l_star                   ! star forming filament size 0.1pc 
+  real(kind=8)                   :: k_star                   ! associated wavelenght                    
+  real(kind=8)                   :: sig_star                 ! velocity dispersion threshold    
+  real(kind=8)                   :: mu_star                  ! column density threshold 
+                                                             ! 150 Msun/pc converted in code unit 10^11Msun/kpc**2.                                                                                                                                                                                                                                                                                                          
 #ifdef POLYTROPIC
   real(kind=8),parameter         :: gamma                    = 6.d0/5.d0                                ! polytropic index (=1.2)
   real(kind=8),parameter         :: kappa                    = 1.                                       ! without unit FIXED HERE
@@ -295,7 +296,7 @@ contains
  
   subroutine gas_read_emptying_timescale
     
-    ! LOAD GAS STRUCTURATION TIME
+    ! LOAD GAS STRUCTURATION TIMESCALE
   
      integer(kind=4)          :: m,l ! loop indexes (accretion rate and disc scaleheight)
 
@@ -316,7 +317,9 @@ contains
        do
           read(gasprop_unit, '(a)', end = 2) line
           if (trim(line) .eq. 'START') then
-             read(gasprop_unit,*) nAccRateBins, nDiscScaleBins  ! read number of bins  
+             read(gasprop_unit,*) larson_mu_slope, larson_sig_slope ! read power law indexes 
+             read(gasprop_unit,*) l_star, sig_star, mu_star         ! read constant parameters
+             read(gasprop_unit,*) nAccRateBins, nDiscScaleBins      ! read number of bins  
              call IO_print_message('use',param_name=(/'nAccRateBins             ','nDiscScaleBins           '/), &
                   int_param_val=(/nAccRateBins,nDiscScaleBins/))
              if (physical_process) then
@@ -357,9 +360,9 @@ contains
   
   !*****************************************************************************************************************
   
-  subroutine gas_read_ngc_table
+  subroutine gas_read_formation_timescale
     
-    ! LOAD THE TABLE CONTAINING THE NUMBER OF GIANT CLOUD ASSOCIATED TO THE TURBULENT CASCADE PROCESS
+    ! LOAD GAS FORMATION TIMESCALE
   
      integer(kind=4)          :: m,l ! loop indexes (accretion rate and disc scaleheight)
 
@@ -367,10 +370,10 @@ contains
     character(MAXPATHSIZE)   :: line
     character(MAXPATHSIZE)   :: message
     
-    call IO_print_message('gas_read_ngc_table')
+    call IO_print_message('gas_read_formation_timescale')
 
-    write(filename,'(a,a,a,a)') trim(input_path), '/gas_Ngc.in'
-    write(message,'(a,a,a,a)') 'Load data from : ', 'gas_Ngc.in'
+    write(filename,'(a,a,a,a)') trim(input_path), '/gas_formation_timescale.in'
+    write(message,'(a,a,a,a)') 'Load data from : ', 'gas_formation_timescale.in'
     call IO_print_message(message)
         
     if (main_process .or. physical_process) then
@@ -380,26 +383,30 @@ contains
        do
           read(gasprop_unit, '(a)', end = 2) line
           if (trim(line) .eq. 'START') then
-             read(gasprop_unit,*) ! nAccRateBins, nDiscScaleBins  ! Already read in gas_read_emptying_timescale
+             read(gasprop_unit,*) ! already read 
+             read(gasprop_unit,*) ! already read 
+             read(gasprop_unit,*) ! already read 
              if (physical_process) then
-                 read(gasprop_unit,*) ! dlAccRate, dlDiscScale ! Already read in gas_read_emptying_timescale
-                 ! allocate array
-                 allocate(ngc_table(nAccRateBins,nDiscScaleBins))
+                 read(gasprop_unit,*) ! already read
+                 ! allocate arrays
+                 allocate(t_form(nAccRateBins,nDiscScaleBins))
                  ! load accretion rates and disc scales
-                 read(gasprop_unit,*) ! AccRateBins ! Already read in gas_read_emptying_timescale
-                 read(gasprop_unit,*) ! DiscScaleBins ! Already read in gas_read_emptying_timescale
-                 read(gasprop_unit,*) ! skip a line
-                 ! read Ngc table
+                 read(gasprop_unit,*) ! already read  
+                 read(gasprop_unit,*) ! already read  
+                 read(gasprop_unit,*) ! blank line
+                 ! read formation timescale (in log)
                  do m = 1, nAccRateBins        
-                    read(gasprop_unit,*) (ngc_table(m,l), l=1,nDiscScaleBins)
+                    read(gasprop_unit,*) (t_form(m,l), l=1,nDiscScaleBins)
                  end do
+                 ! set t_str_max
+                 t_form_max = 10.**maxval(t_form) ! in Gyr
               end if
               exit  ! quit do loop
           end if
           if (line(1:1) .eq. '#') then
             cycle ! header or something like this (skip)
           else    
-            call IO_print_error_message('Impossible to read the line',only_rank=rank,called_by='gas_read_ngc_table') 
+            call IO_print_error_message('Impossible to read the line',only_rank=rank,called_by='gas_read_formation_timescale') 
             write(*,*) trim(line)
             stop ! stop the program
           end if
@@ -408,8 +415,8 @@ contains
     end if
   
     return
-  end subroutine gas_read_ngc_table
-
+  end subroutine gas_read_formation_timescale
+  
   !*****************************************************************************************************************
 
   subroutine gas_set_reference_mass
@@ -1726,7 +1733,7 @@ contains
     real(kind=8), intent(in)   :: k                ! wavenumber [kpc^-1]
     real(kind=8)               :: Bonno_Ebert_Mass ! [code unit]
 
-    Bonno_Ebert_Mass = 1.3*sig_star**4./gravconst_code_unit**2./mu_star*(k/k_star)**(larson_mu_slope-4*larson_sig_slope) ! in code unit
+    Bonno_Ebert_Mass = (3.d0/2.d0)*sig_star**4./gravconst_code_unit**2./mu_star*(k/k_star)**(larson_mu_slope-4*larson_sig_slope) ! in code unit
      
     return
   end function Bonno_Ebert_Mass

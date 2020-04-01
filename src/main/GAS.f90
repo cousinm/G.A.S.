@@ -85,7 +85,7 @@ program G_A_S
   call gas_read_gas_properties
   ! gas 
   call gas_read_emptying_timescale
-  call gas_read_ngc_table 
+  call gas_read_formation_timescale
   ! Set Inter-Galactic Medium
   call gas_igm_initialize  
   !
