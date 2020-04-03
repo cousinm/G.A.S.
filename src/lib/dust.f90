@@ -492,7 +492,7 @@ contains
             end if
         end do
         !
-        l = 0
+        l = 1
         ! Initialize i_14eV, i_FUV, i_6eV, i_B and i_V
         ! 6 eV    => 0.20664 mu m
         ! 13.6 eV => 0.09116 mu m

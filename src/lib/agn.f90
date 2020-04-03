@@ -205,7 +205,7 @@ contains
         !
         ! receive agn informations
         ! receive agn mass
-        call MPI_RECV(agn%mass,1,MPI_REAL8,rank-1,agn_tag+2,MPI_COMM_WORLD,ierror)
+        call MPI_RECV(agn%mass,1,MPI_REAL8,rank-1,agn_tag+2,MPI_COMM_WORLD,statut,ierror)
         !
         ! receive bolometric luminosity
         call MPI_RECV(agn%L,1,MPI_REAL8,rank-1,agn_tag+3,MPI_COMM_WORLD,statut,ierror)

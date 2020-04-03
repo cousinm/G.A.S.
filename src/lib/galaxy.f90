@@ -964,11 +964,14 @@ contains
         ! for the remnant structure, the accreted gas mass is the mass accreted by the firts progenitor
         gal%accreted_gas_mass = gal1%accreted_gas_mass
         if (gal1%disc%t_since_last_merger .eq. 0.d0) then
+          !
           ! gal1%disc%t_since_last_merger = 0., it is a multi-merger event
           ! we save the most important merger events of the sequence
           gal%mu_tot = max(mu,gal1%mu_tot)
           gal%mu_gas = max(mu_gas,gal1%mu_gas)
+          !
         else
+          !
           ! gal1%t_since_last_merger > 0.
           ! it the first merger (may be in a multi-merger event but at this time it is impossible to kwown)
           gal%mu_tot = mu
@@ -1001,6 +1004,7 @@ contains
           gal%bulge%stars = gal1%bulge%stars + gal1%disc%stars + gal2%disc%stars + gal2%bulge%stars
           ! 2th step: young stars are transfered to the disc structure
           call stars_transfer_young_stars(gal%bulge%stars,gal%disc%stars)
+          !
         else
           !
           ! ****************************************************
@@ -1025,21 +1029,21 @@ contains
         end if
         ! 
         ! GAS
-        ! @ this point the new geometrical caracteristic of the remnant disc are computed and save in gal%disc
+        ! @ this point the new caracteristics of the remnant disc are computed and save in gal%disc
         ! in the two cases, minor or major mergers, 
         ! all gas components coming from the two progenitors are added. They form a new gas disc
         nosfg_from_bulges = gal1%bulge%no_sfg + gal2%bulge%no_sfg
         !
         ! AGN 
         if ((agn_mass(gal1%disc%agn) .gt. 0.d0) .or. (agn_mass(gal2%disc%agn) .gt. 0.d0)) then
-            ! One or the two progenitors have already an SMBH
+            ! One or the two progenitors have already a SMBH
             ! Merge 
             gal%disc%agn = agn_merge(gal1%disc%agn,gal2%disc%agn)
         else
             ! No pre-existing SMBH
             ! try to create it
             if (bulge_mass(gal%bulge) .gt. 1.d4*M_BH_min) then
-                ! compute the fraction of the stellar mass which will be turn into a black-hole
+                ! compute the fraction of the stellar mass which will be turned into a black-hole
                 f = M_BH_min / bulge_mass(gal%bulge,component='stars')
                 ! the the black hole mass is composed of stellar stars
                 gal%bulge%stars = gal%bulge%stars*(1.d0-f)
@@ -1065,7 +1069,7 @@ contains
             !
             ! set the new dynamical time of the accretion process
             call agn_set_dynamical_time(gal%disc%agn,r_torus/disc_velocity(r_torus,dm1,gal%disc,gal%bulge))
-            
+            !
         end if
         !
         ! Gas structuration history
@@ -1075,10 +1079,6 @@ contains
         !            
         ! Update morphology of the disc    
         gal%disc%morpho = disc_update_morpho(gal1%disc,gal2%disc)  
-        !
-!~         ! DUST
-!~         ! update morphology of the dust ISM component
-!~         gal%disc%dust(2)%geom = gal%disc%morpho
         ! 
         ! OTHER PROPERTIES
         ! for disc
@@ -1104,8 +1104,8 @@ contains
         gal%disc%h         = disc_scale_height(gal%disc)
         ! compute star formation timescale
         gal%disc%t_sf      = disc_star_formation_timescale()
-        ! update the emptying timescale
-        gal%disc%t_emp     = disc_emptying_timescale(gal%disc,disc1=gal1%disc,disc2=gal2%disc)      
+        ! update inertial cascade properties t_emp, t_form, t_cascade, ngc
+        call disc_update_inertial_cascade(gal%disc,disc1=gal1%disc,disc2=gal2%disc)     
         !
         ! for bulge
         ! set the bulge formation time and life time

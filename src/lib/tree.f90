@@ -283,25 +283,25 @@ contains
     if (go_down) then 
         !
         ! receive the timestep index
-        call MPI_RECV(u%ts,1,MPI_INTEGER4,rank-1,tree_tag+2,MPI_COMM_WORLD,ierror)
+        call MPI_RECV(u%ts,1,MPI_INTEGER4,rank-1,tree_tag+2,MPI_COMM_WORLD,statut,ierror)
         !
         ! receive the number of computable halo at the current timestep
-        call MPI_RECV(u%nb_of_computable_halos,1,MPI_INTEGER4,rank-1,tree_tag+3,MPI_COMM_WORLD,ierror)
+        call MPI_RECV(u%nb_of_computable_halos,1,MPI_INTEGER4,rank-1,tree_tag+3,MPI_COMM_WORLD,statut,ierror)
         !
         ! receive the expansion factor
         call MPI_RECV(u%aexp,1,MPI_REAL4,rank-1,tree_tag+4,MPI_COMM_WORLD,statut,ierror)
         !
         ! receive the halo identification parameter
-        call MPI_RECV(u%tree(1)%HID,1,MPI_INTEGER8,rank-1,tree_tag+5,MPI_COMM_WORLD,ierror)
+        call MPI_RECV(u%tree(1)%HID,1,MPI_INTEGER8,rank-1,tree_tag+5,MPI_COMM_WORLD,statut,ierror)
         !
         ! receive the host halo identification parameter
-        call MPI_RECV(u%tree(1)%host_HID,1,MPI_INTEGER8,rank-1,tree_tag+6,MPI_COMM_WORLD,ierror)
+        call MPI_RECV(u%tree(1)%host_HID,1,MPI_INTEGER8,rank-1,tree_tag+6,MPI_COMM_WORLD,statut,ierror)
         !
         ! receive the halo level
-        call MPI_RECV(u%tree(1)%level,1,MPI_INTEGER4,rank-1,tree_tag+7,MPI_COMM_WORLD,ierror)
+        call MPI_RECV(u%tree(1)%level,1,MPI_INTEGER4,rank-1,tree_tag+7,MPI_COMM_WORLD,statut,ierror)
         !
         ! receive the number of computed dads
-        call MPI_RECV(u%tree(1)%n_computed_dads,1,MPI_INTEGER4,rank-1,tree_tag+8,MPI_COMM_WORLD,ierror)
+        call MPI_RECV(u%tree(1)%n_computed_dads,1,MPI_INTEGER4,rank-1,tree_tag+8,MPI_COMM_WORLD,statut,ierror)
         !
     end if
             
