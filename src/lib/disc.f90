@@ -2504,7 +2504,7 @@ contains
         ! dynamical time
         t_dyn_acc = racc / Vacc
         ! kinetic energy of the accreted gaseous disc
-        fdisp  = min(1.d0, (1.d0/3.d0)*(dt/t_dyn_acc))
+        fdisp  = min(1.d0, (1.d0/2.d0)*(dt/t_dyn_acc))
         Edisp1 = fdisp*5.d-1*gas_mass(accreted_mass)*Vacc**2.
         ! focus only on unstructured gas
         M1 = (1.d0 - accreted_mass%f_str)*M1
@@ -2513,7 +2513,7 @@ contains
         ! we assume that a fraction of the turbulent energy is lost during a orbital time
         ! this routine is called after the update of disc%gsh_tab, we have to remove the latest accreted mass
         M2     = max(0.d0,disc_mass(disc,component='unstr') - M1)
-        fdisp  = (1.d0-min(1.d0,(1.d0/2.d0)*(dt/disc%t_dyn)*slope_limiter(disc%dV,3.d1*sig_star)))
+        fdisp  = (1.d0-min(1.d0,(2.d0/3.d0)*(dt/disc%t_dyn)*slope_limiter(disc%dV,3.d1*sig_star)))
         Edisp2 = fdisp*5.d-1*M2*disc%dV**2.
         !
         ! Add a fraction of the gravitatial interaction energy
