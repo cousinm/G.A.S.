@@ -1084,14 +1084,14 @@ contains
                 disc_mass(disc,component='sfg')*disc_gas_signature(disc,component='sfg')
       if ((gas_mass(gas) .gt. 0.d0) .and. (disc%h .gt. 0.d0)) then
         !
-        call dust_evolve(disc%dust(1),gas*(1.d0/max(1.d0,real(disc%ngc,kind=8))),3.d0*disc%h/4.d0)
+        call dust_evolve(disc%dust(1),gas*(1.d0/max(1.d0,real(disc%ngc,kind=8))),disc%h/2.d0)
       endif
       !
       ! ISM
       gas = disc_mass(disc,component='unstr')*disc_gas_signature(disc,component='unstr')
       if ((gas_mass(gas) .gt. 0.d0) .and. (disc%rd .gt. 0.d0)) then
         !
-        call dust_evolve(disc%dust(2),gas,disc%rd,incl=disc%incl)
+        call dust_evolve(disc%dust(2),gas,1.68d0*disc%rd,incl=disc%incl)
       end if
       !
       ! print instantaneous disc properties of the followed disc
