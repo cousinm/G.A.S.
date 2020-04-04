@@ -368,8 +368,8 @@ contains
     disc%cooling_timescale =  0.d0
     disc%t_sf              = -1.d0
     disc%t_cascade         =  0.d0
-    disc%t_emp             =  0.d0
-    disc%t_form            =  0.d0
+    disc%t_emp             =  t_str_max
+    disc%t_form            =  t_form_max
     disc%Qturb_unstr       =  0.d0
     !
     ! interaction with the main halo hot gas (stripping)
@@ -884,7 +884,6 @@ contains
         implicit none
 
         real(kind=8)               :: nosfg2sfg_rate         ! the transfer rate
-        real(kind=8)               :: M_str                  ! the mass of structured gas (without sfg)
 
         type(disc_type),intent(in) :: disc                   ! the disc component
 
@@ -924,7 +923,7 @@ contains
     implicit none
 
     real(kind=8),intent(in)         :: dt                     ! effective evolving time of the disc
-    real(kind=8)                    :: Unosfg,Usfg,dU         ! mass variation test
+    real(kind=8)                    :: Uunstr,Ustr,dU         ! mass variation test
 
     type(gas_type)                  :: loss_rate_prior        ! mass loss rate used as prior value in disc_evolve_I
     type(gas_type)                  :: loss_rate              ! effective stellar mass loss rate
@@ -979,39 +978,39 @@ contains
     ! *****************************
     !
     ! save previous value for the diffuse gas phase
-    Unosfg = disc_mass(disc,component='unstructured')
-    ! save previous value for star forming gas phase
-    Usfg = disc_mass(disc,component='sfg')
+    Uunstr = disc_mass(disc,component='unstructured')
+    ! save previous value for structured gas phase (without the star forming gas)
+    Ustr = disc_mass(disc,component='structured')
     ! evolve the gas structuration history
     call disc_update_gas_struct_history(disc,dt=dt)
     !
     ! test mass variation
-    if (Unosfg .gt. M_gas_min) then
+    if (Uunstr .gt. M_gas_min) then
         !
-        dU = abs(disc_mass(disc,component='unstructured')-Unosfg)
-        if ((abs(dU)/Unosfg) .gt. physical_precision) then
+        dU = abs(disc_mass(disc,component='unstructured')-Uunstr)
+        if ((abs(dU)/Uunstr) .gt. physical_precision) then
           !
-          call IO_print_error_message('No quasi-static state of the nosfg component',only_rank=rank,called_by='disc_evolve_II')
+          call IO_print_error_message('No quasi-static state of the diffuse gas component',only_rank=rank,called_by='disc_evolve_II')
           call IO_print_message('with',only_rank=rank,component='disc', &
                       param_name = (/'dU/U (%)                 ','U                        ','dU                       ',&
                                      'loss_rate_prior          ','loss_rate                '/), &
-                      real_param_val = (/1.d2*dU/Unosfg,Unosfg,dU,gas_mass(loss_rate_prior),gas_mass(loss_rate)/))
+                      real_param_val = (/1.d2*dU/Uunstr,Uunstr,dU,gas_mass(loss_rate_prior),gas_mass(loss_rate)/))
                       write(*,*) 'dt = ', dt
           stop  ! stop the program
         end if
     end if
     !
     ! test mass variation
-    if (Usfg .gt. M_gas_min) then
+    if (Ustr .gt. M_gas_min) then
         !
-        dU = abs(disc_mass(disc,component='sfg')-Usfg)
-        if ((abs(dU)/Usfg) .gt. physical_precision) then
+        dU = abs(disc_mass(disc,component='structured')-Ustr)
+        if ((abs(dU)/Ustr) .gt. physical_precision) then
           !
-          call IO_print_error_message('No quasi-static state of the sfg component',only_rank=rank,called_by='disc_evolve_II')
+          call IO_print_error_message('No quasi-static state of the fragmented gas component',only_rank=rank,called_by='disc_evolve_II')
           call IO_print_message('with',only_rank=rank,component='disc', &
                       param_name = (/'dU/U (%)                 ','U                        ','dU                       ',&
                                      'sfr                      '/), &
-                      real_param_val = (/1.d2*dU/Usfg,Usfg,dU,gas_mass(disc%sfr)/))
+                      real_param_val = (/1.d2*dU/Ustr,Ustr,dU,gas_mass(disc%sfr)/))
           stop  ! stop the program
         end if
     end if
@@ -1713,12 +1712,14 @@ contains
           ! Major merger cases
           ! During major mergers, it is assumed that all the disc structure is affected
           ! Inertial cascades are strongly disrupted, and the remanent inertial cascade is initialised.
-          ! Therefore all timescale are resetled
+          ! Therefore the clock are resetled
+          ! and the timescales are setled to the mas value of the two progenitors
+          ! That ensure the necessary delay for the formation of the new inertial cascade
           disc%t_cascade = 0.d0
           !
-          disc%t_form = 0.d0
+          disc%t_form = max(disc1%t_form,disc2%t_form)
           !
-          disc%t_form = 0.d0
+          disc%t_emp = max(disc1%t_emp,disc2%t_emp)
           !
           disc%ngc = 0
         end if
