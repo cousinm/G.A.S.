@@ -1079,11 +1079,20 @@ contains
       ! evolve dust properties
       ! dust_evolve(d,gas,rc,incl=incl)
       ! BC
+      ! Fragmented gas and dusts are assumed to be distributed homogeneously into the different GMCs
+      ! BC contains structured and star-forming gas
+      ! build the complete gas object
       gas = disc_mass(disc,component='str')*disc_gas_signature(disc,component='str') + &
                 disc_mass(disc,component='sfg')*disc_gas_signature(disc,component='sfg')
-      if ((gas_mass(gas) .gt. 0.d0) .and. (disc%h .gt. 0.d0)) then
+      ! Scale the gas component to a BE mass
+      if (disc%h .gt. 0.d0) then
         !
-        call dust_evolve(disc%dust(1),gas*(1.d0/max(1.d0,real(disc%ngc,kind=8))),disc%h/2.d0)
+        gas = min(gas_mass(gas),Bonnor_Ebert_Mass(1.d0/disc%h))*gas_signature(gas)
+        if (gas_mass(gas) > 0.d0) then
+            !
+            ! We compute here the effective extinction associated to 1 GMC
+            call dust_evolve(disc%dust(1),gas,disc%h/2.d0)
+        end if
       endif
       !
       ! ISM
