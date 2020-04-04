@@ -1730,7 +1730,9 @@ contains
         !
         if (M1 .gt. 0.d0) then
           ! update the glogal effective clock of the inertial cascade
-          disc%t_cascade = max(0.d0,M1-M2)*(disc%t_cascade + dt)/M1
+          ! it is assumed that the new incoming gas is continuously added
+          ! therefore, in average the new gas has spent dt/2 in the cascade
+          disc%t_cascade = (max(0.d0,M1-M2)*(disc%t_cascade + dt) + dt/2.d0*M2)/M1
         end if
         !
         ! update the effectif formation timescale of the inertial cascade
