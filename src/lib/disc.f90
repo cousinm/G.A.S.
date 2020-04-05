@@ -1736,7 +1736,7 @@ contains
         M1 = disc_mass(disc,component='structured')   ! The mass of structured gas into the disc
         M2 = gas_mass(condensed_mass)                 ! The mass of newly condensed gas
         !
-        if (M1 .gt. 0.d0) then
+        if ((M1 + M2) .gt. 0.d0) then
           ! update the glogal effective clock of the inertial cascade
           ! it is assumed that the new incoming gas is continuously added
           ! therefore, in average the new gas has spent dt/2 in the cascade
