@@ -811,10 +811,8 @@ contains
         ! compute the gas metallicity of the unstructured gas phase
         Z_unstr = gas_metallicity(disc_gas_signature(disc,component='unstructured'))
         ! compute the density of the unstructured/diffuse gas phase
-        ! the diffuse gas evolve in a thick disc 2 times larger than the stellar component
-        ! and with a disc scale height "h"
-        ! 99.9% of the mass of an exponential disc with a characteristic radius "rd" in enclosed in a radius r_ext = 11 x rd
-        rho_unstr = M_unstr / (pi*(2.2d1*disc%rd)**2.) / disc%h  ! [code unit]
+        ! The average density of unstructured gas is computed according to the half mass radius
+        rho_unstr = 5.d-1*M_unstr / (pi*(1.65d0*disc%rd)**2.) / disc%h  ! [code unit]
         ! cooling timescale
         t_cool_ts = t_cool(diffuse_gas_temp,rho_unstr,Z_unstr)   ! [Gyr]
         if (present(cooling_timescale)) cooling_timescale = t_cool_ts
