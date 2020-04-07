@@ -9,7 +9,7 @@ PARAM_FILE_DIR = ../param_files/
 F90C    = mpif90
 DEBUG   = -g -Wall -Warray-bounds -Wunderflow -fbounds-check -fbacktrace -frepack-arrays -finit-local-zero -ffree-line-length-none
 OPTIM   = -O2 -frepack-arrays -finit-local-zero -ffree-line-length-none 
-FFLAGS  = -cpp $(DEBUG)
+FFLAGS  = -cpp $(OPTIM)
 LIB     = libGalICS.a -lcfitsio
 
 MAIN    = GAS.f90
@@ -54,7 +54,7 @@ PROG    = GAS_MPI
 # low level option
 #OPTIONS = -DHORIZON -DUNLINKED_TREES -DCLEAN
 # global model
-OPTIONS = -DHORIZON -DCLEAN -DTREE_EVOLVE -DPHOTOIONISATION -DOKAMOTO_2008 -DCOLD_STREAMS -DSUB_QUENCHING -DSUB_STRIPPING -DSUB_TRANSFER -DREACCRETION -DTHERMAL_INSTABILITIES
+OPTIONS = -DHORIZON -DUNLINKED_TREES -DCLEAN -DTREE_EVOLVE -DPHOTOIONISATION -DOKAMOTO_2008 -DCOLD_STREAMS -DSUB_QUENCHING -DREACCRETION -DTHERMAL_INSTABILITIES
 # 
 #OPTIONS = -DHORIZON -DUNLINKED_TREES -DCLEAN 
 
