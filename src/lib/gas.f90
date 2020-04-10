@@ -21,6 +21,8 @@ module gas
   !
   !  gas_read_formation_timescale      : Read the gas formation timescale table
   !
+  !  gas_read_equilibrium_timescale    : Read the gas equilibrium timescale table
+  !
   !  gas_set_reference_mass            : Initialize gas reference mass : M_gas_min
   !
   !  gas_igm_initialize                : Initialize the IGM phase
@@ -87,7 +89,11 @@ module gas
   !
   !  gas_t_form                        : return the formation timescale of the interial cascade
   !
+  !  gas_t_eq                          : return the equilibrium timescale of the inertial cascade
+  !
   !  Bonnor_Ebert_Mass                 : return the Bonnor Ebert mass of the current largest scale of the disc
+  !
+  !  Saturation_Mass                   : return the saturation mass of the inertial cascade at a given scale k
   !
   !  Maxwell_Boltzman_Vdist            : return F(v) for a Maxwell boltzmann velocity distribution
   !
@@ -138,9 +144,15 @@ module gas
   ! GAS STRUCTURATION HISTORY (GSH_TYPE) DEFINITION *
 
   type gsh_type
-    type(gas_type), allocatable  :: gas(:)           ! gas mass at a given structuration level
-    type(gas_type), allocatable  :: in_rate(:)       ! input mass rate for a given structuration level
-    type(gas_type), allocatable  :: out_rate(:)      ! output mass rate for a given structuration level
+    real(kind=8) :: t_cascade                    ! inertial cascade evolution clock
+    real(kind=8) :: t_form                       ! inertial cascade formation timescale
+    real(kind=8) :: t_eq                         ! inertial cascade equilibrium timescale
+    real(kind=8) :: t_emp                        ! inertial cascade emptying timescale
+    real(kind=8) :: t_prod                       ! NON-sfg to SFG production timescale
+    !
+    type(gas_type), allocatable  :: gas(:)       ! gas mass at a given structuration level
+    type(gas_type), allocatable  :: in_rate(:)   ! input mass rate for a given structuration level
+    type(gas_type), allocatable  :: out_rate(:)  ! output mass rate for a given structuration level
   end type gsh_type
 
   ! DEFINE IGM *********************
@@ -173,6 +185,8 @@ module gas
   real(kind=8)                   :: t_str_max        ! maximum value of the gas structuration timescale
   real(kind=8),allocatable       :: t_form(:,:)      ! cascade formation timescale (first dim: acc rate, second dim: disc scale)
   real(kind=8)                   :: t_form_max       ! maximum value of the gas cascade formation timescale
+  real(kind=8),allocatable       :: t_eq(:,:)        ! cascade equilibrium timescale (first dim: acc rate, second dim: disc scale)
+  real(kind=8)                   :: t_eq_max         ! maximum value of the gas cascade equilibrium timescale  
 
   type(gas_type),allocatable     :: InitAbund(:)     ! Initial abundances (mass fraction) associated to each metallicity bin
                                                      ! InitAbund is defined as a gas object therefore InitAbund[Z]%mass = 1., InitAbund[Z]%mZ = metBins(Z)
@@ -437,6 +451,65 @@ contains
 
   !*****************************************************************************************************************
 
+  subroutine gas_read_equilibrium_timescale
+
+    ! LOAD GAS EQUILIBRIUM TIMESCALE
+
+     integer(kind=4)          :: m,l ! loop indexes (accretion rate and disc scaleheight)
+
+    character(MAXPATHSIZE)   :: filename
+    character(MAXPATHSIZE)   :: line
+    character(MAXPATHSIZE)   :: message
+
+    call IO_print_message('gas_read_equilibrium_timescale')
+
+    write(filename,'(a,a,a,a)') trim(input_path), '/gas_equilibrium_timescale.in'
+    write(message,'(a,a,a,a)') 'Load data from : ', 'gas_equilibrium_timescale.in'
+    call IO_print_message(message)
+
+    if (main_process .or. physical_process) then
+       ! Open the "gas properties" file
+       open(unit = gasprop_unit, file = filename, status = 'old')
+       !
+       do
+          read(gasprop_unit, '(a)', end = 2) line
+          if (trim(line) .eq. 'START') then
+             read(gasprop_unit,*) ! already read
+             read(gasprop_unit,*) ! already read
+             read(gasprop_unit,*) ! already read
+             if (physical_process) then
+                 read(gasprop_unit,*) ! already read
+                 ! allocate arrays
+                 allocate(t_eq(nAccRateBins,nDiscScaleBins))
+                 ! load accretion rates and disc scales
+                 read(gasprop_unit,*) ! already read
+                 read(gasprop_unit,*) ! already read
+                 read(gasprop_unit,*) ! blank line
+                 ! read formation timescale (in log)
+                 do m = 1, nAccRateBins
+                    read(gasprop_unit,*) (t_eq(m,l), l=1,nDiscScaleBins)
+                 end do
+                 ! set t_form_max
+                 t_eq_max = 10.**maxval(t_eq) ! in Gyr
+              end if
+              exit  ! quit do loop
+          end if
+          if (line(1:1) .eq. '#') then
+            cycle ! header or something like this (skip)
+          else
+            call IO_print_error_message('Impossible to read the line',only_rank=rank,called_by='gas_read_equilibrium_timescale')
+            write(*,*) trim(line)
+            stop ! stop the program
+          end if
+       end do
+2      close(gasprop_unit)
+    end if
+
+    return
+  end subroutine gas_read_equilibrium_timescale
+  
+  !*****************************************************************************************************************
+
   subroutine gas_set_reference_mass
 
     ! INITIALIZE M_gas_min A MASS PARAMETERS LINKED TO THE DARK-MATTER N-BODY SIMULATION
@@ -535,7 +608,14 @@ contains
         call gas_deallocate_gsh(gsh)
     endif
 
-    ! By default the gas structuration history contain the sfg and the no-sfg cells
+	! Init timescales
+	gsh%t_cascade =  0.d0
+    gsh%t_form    =  0.d0
+    gsh%t_eq      =  0.d0
+    gsh%t_prod    =  0.d0
+    gsh%t_emp     =  0.d0
+   
+    ! By default the gas structuration history contain the diffuse, the structured and the star forming cells
     n = 1
     if (present(nlevels)) n = nlevels+1
 
@@ -710,10 +790,17 @@ contains
     type(gsh_type), intent(inout)  :: gsh1  ! a gas structuration history table
     type(gsh_type), intent(in)     :: gsh2  ! an other gas structuration history table
 
+	! Copy timescales
+    gsh1%t_cascade = gsh2%t_cascade  ! Inertial cascade clock
+    gsh1%t_form = gsh2%t_form ! Inertial cascade formation timescale
+    gsh1%t_eq = gsh2%t_eq ! Inertial cascade equilibrium timescale
+    gsh1%t_prod = gsh2%t_prod  ! Inertial cascade production timescale
+    gsh1%t_emp = gsh2%t_emp ! Inertial cascade emptying timescale
+    
     call gas_copy_array(gsh1%gas,gsh2%gas)
     call gas_copy_array(gsh1%in_rate,gsh2%in_rate)
     call gas_copy_array(gsh1%out_rate,gsh2%out_rate)
-
+    
     return
 
   end subroutine gas_copy_gsh
@@ -1765,8 +1852,7 @@ contains
         if (h .gt. 0.d0) then
             log_h = log10(h)
             !
-            ! Structuration timescale
-            ! load log(t_str)
+            ! Formation timescale
             gas_t_form = locate2D(log_acc_rate,log_h,t_form, &
                             nAccRateBins,nDiscScaleBins, &
                             AccRatemin,DiscScalemin, &
@@ -1778,6 +1864,48 @@ contains
     return
   end function gas_t_form
 
+!*****************************************************************************************************************
+
+   function gas_t_eq(acc_rate,h)
+
+    ! Return the gas equilibrium time-scale as a function of the gas accretion rate and the disc scale height
+    ! The output is given in Gyr
+
+    implicit none
+
+    real(kind=8),intent(in)              :: h           ! the disc scale height [kpc]
+    real(kind=8)                         :: gas_t_eq    ! The gas equilibrium time scale [Gyr]
+    real(kind=8)                         :: log_acc_rate
+    real(kind=8)                         :: log_h
+
+    type(gas_type),intent(in)            :: acc_rate    ! the accretion rate onto the largest structure [10^11 Msun/Gyr]
+
+    ! init to the maximaum value
+    gas_t_eq = t_eq_max
+
+    ! Accretion rate
+    !
+    log_acc_rate = gas_mass(acc_rate) ! in code unit
+    if (log_acc_rate .gt. 0.d0) then
+        log_acc_rate = log10(log_acc_rate)
+        !
+        ! Disc scale height
+        !
+        if (h .gt. 0.d0) then
+            log_h = log10(h)
+            !
+            ! Equilibrium timescale
+            gas_t_eq = locate2D(log_acc_rate,log_h,t_eq, &
+                            nAccRateBins,nDiscScaleBins, &
+                            AccRatemin,DiscScalemin, &
+                            dlAccRate,dlDiscScale)
+            gas_t_eq = (1.d1)**gas_t_eq ! in Gyr
+        end if
+    end if
+
+    return
+  end function gas_t_eq
+  
   !*****************************************************************************************************************
 
   function Bonnor_Ebert_Mass(k)
@@ -1789,10 +1917,28 @@ contains
     real(kind=8), intent(in)   :: k                 ! wavenumber [kpc^-1]
     real(kind=8)               :: Bonnor_Ebert_Mass ! [code unit]
 
-    Bonnor_Ebert_Mass = (3.d0/2.d0)*sig_star**4./gravconst_code_unit**2./mu_star*(k/k_star)**(larson_mu_slope-4*larson_sig_slope) ! in code unit
+    Bonnor_Ebert_Mass = (3.d0/2.d0)*sig_star**4./gravconst_code_unit**2./mu_star*(k/k_star)**(larson_mu_slope-4.*larson_sig_slope) ! in code unit
 
     return
   end function Bonnor_Ebert_Mass
+  
+  !*****************************************************************************************************************
+
+  function Saturation_Mass(k, acc_rate)
+
+    ! RETURN THE SATURATION MASS OF THE SYSTEM AT SCALE K
+
+    implicit none
+
+    real(kind=8), intent(in)   :: k               ! wavenumber [kpc^-1]       
+    real(kind=8)               :: Saturation_Mass ! [code unit]
+    
+    type(gas_type),intent(in)  :: acc_rate ! instantaneous accretion rate onto the scale h
+
+    Saturation_Mass = gas_mass(acc_rate) / ((2.d0/27.d0)*(pi*gravconst_code_unit**2.*mu_star**2./sig_star**3./k_star)*(k/k_star)**(6.*larson_sig_slope-larson_mu_slope-3.)) ! in code unit
+
+    return
+  end function Saturation_Mass
 
   !*****************************************************************************************************************
 

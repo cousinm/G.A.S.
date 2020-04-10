@@ -995,7 +995,7 @@ contains
           gal%bulge%rb = gal%bulge%rb/(1.d0+sqrt(2.d0))                          ! bulge scale radius
           ! compute exponential radius of the remnant disc
           gal%disc%rd = (M1*gal1%disc%rd + M2*gal2%disc%rd)/(M1+M2)    ! mass weighted exponential radius
-          gal%disc%rd = max(gal%disc%rd,dm1%spin*dm1%R_vir/sqrt(2.d0)) ! max value with dm spin properties
+          gal%disc%rd = min(gal%disc%rd/2.d0,dm1%spin*dm1%R_vir/sqrt(2.d0)) ! max value with dm spin properties
           ! compute the new disc inclination
           call disc_compute_inclination(gal%disc,dm1,disc1=gal1%disc,disc2=gal2%disc,mu=mu)
           !

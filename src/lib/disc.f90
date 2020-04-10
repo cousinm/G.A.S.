@@ -149,9 +149,6 @@ module disc
     real(kind=8)        :: t_cool              ! cooling clock of the unstructured gas
     real(kind=8)        :: cooling_timescale   ! cooling timescale of the diffuse gas
     real(kind=8)        :: t_sf                ! star formation timescale
-    real(kind=8)        :: t_cascade           ! inertial cascade evolution clock
-    real(kind=8)        :: t_form              ! inertial cascade formation timescale
-    real(kind=8)        :: t_emp               ! inertial cascade emptying timescale
     real(kind=8)        :: dV                  ! mean velocity dispersion at the disc scale height (in the diffuse gas)
     real(kind=8)        :: Q                   ! Toomre parameter
     real(kind=8)        :: sfr_burst           ! save value of the instantaneous sfr at the last merger event
@@ -174,7 +171,7 @@ module disc
   ! hdu reference for disc structure
   integer(kind=4)           :: hdu_disc
   ! printable properties for disc structure
-  integer(kind=4),parameter :: nb_disc_field = 38 ! Number of disc properties saved
+  integer(kind=4),parameter :: nb_disc_field = 39 ! Number of disc properties saved
   ! Name of each output colomn data
   character(len=ttype_len),dimension(nb_disc_field) :: ttype_disc = (/'t_since_last_merger   ','disc_unstr_gas        ','disc_unstr_mZ         ',&
                                                                       'disc_unstr_mH         ','disc_unstr_mC         ','disc_unstr_mN         ',&
@@ -185,21 +182,21 @@ module disc
                                                                       'disc_ngc              ','disc_rd               ','disc_h                ',&
                                                                       'disc_V                ','disc_dV               ','disc_Q                ',&
                                                                       'disc_cool_timescale   ','disc_t_dyn            ','disc_t_cool           ',&
-                                                                      'disc_t_cascade        ','disc_t_form           ','disc_t_emp            ',&
-                                                                      'disc_gas_acc_rate     ','disc_stripping_rate   ','disc_str_rate         ',&
-                                                                      'disc_disrupt_rate     ','disc_nosfg_2_sfg      ','disc_ejecta_rate      ',&
-                                                                      'disc_sfr              ','disc_sfr_burst        '/)
+                                                                      'disc_t_cascade        ','disc_t_form           ','disc_t_eq             ',&
+                                                                      'disc_t_emp            ','disc_gas_acc_rate     ','disc_stripping_rate   ',&
+                                                                      'disc_str_rate         ','disc_disrupt_rate     ','disc_nosfg_2_sfg      ',&
+                                                                      'disc_ejecta_rate      ','disc_sfr              ','disc_sfr_burst        '/)
   ! Physical unit of each column data
   character(len=tunit_len),dimension(nb_disc_field) :: tunit_disc = (/'Gyr         ','M_sun       ','M_sun       ','M_sun       ','Msun        ','M_sun       ',&
                                                                       'M_sun       ','M_sun       ','w_o_unit    ','M_sun       ','Msun        ','M_sun       ',&
                                                                       'M_sun       ','M_sun       ','M_sun       ','M_sun       ','w_o_unit    ','w_o_unit    ',&
                                                                       'w_o_unit    ','kpc         ','kpc         ','km/s        ','km/s        ','wounit      ',&
                                                                       'Gyr         ','Gyr         ','Gyr         ','Gyr         ','Gyr         ','Gyr         ',&
-                                                                      'M_sun/yr    ','M_sun/yr    ','M_sun/yr    ','M_sun/yr    ','M_sun/yr    ','M_sun/yr    ',&
-                                                                      'M_sun/yr    ','M_sun/yr    '/)
+                                                                      'Gyr         ','M_sun/yr    ','M_sun/yr    ','M_sun/yr    ','M_sun/yr    ','M_sun/yr    ',&
+                                                                      'M_sun/yr    ','M_sun/yr    ','M_sun/yr    '/)
   ! Data type of each column data
   character(len=tform_len),dimension(nb_disc_field) :: tform_disc = (/'1E','1E','1E','1E','1E','1E','1E','1E','1E','1E','1E','1E',&
-                                                                      '1E','1E','1E','1E','1E','1E','1J','1E','1E','1E','1E','1E',&
+                                                                      '1E','1E','1E','1E','1E','1E','1J','1E','1E','1E','1E','1E','1E',&
                                                                       '1E','1E','1E','1E','1E','1E','1E','1E','1E','1E','1E','1E','1E','1E'/)
   ! *** STARS ***
   ! Name of each output colomn data
@@ -367,9 +364,6 @@ contains
     disc%t_cool            =  0.d0
     disc%cooling_timescale =  0.d0
     disc%t_sf              = -1.d0
-    disc%t_cascade         =  0.d0
-    disc%t_emp             =  t_str_max
-    disc%t_form            =  t_form_max
     disc%Qturb_unstr       =  0.d0
     !
     ! interaction with the main halo hot gas (stripping)
@@ -429,9 +423,6 @@ contains
     disc1%t_cool             = disc2%t_cool
     disc1%cooling_timescale  = disc2%cooling_timescale
     disc1%t_sf               = disc2%t_sf
-    disc1%t_cascade          = disc2%t_cascade
-    disc1%t_emp              = disc2%t_emp
-    disc1%t_form             = disc2%t_form
     disc1%sfr_burst          = disc2%sfr_burst
     disc1%Qturb_unstr        = disc2%Qturb_unstr
     !
@@ -812,7 +803,7 @@ contains
         Z_unstr = gas_metallicity(disc_gas_signature(disc,component='unstructured'))
         ! compute the density of the unstructured/diffuse gas phase
         ! The average density of unstructured gas is computed according to the half mass radius
-        rho_unstr = 5.d-1*M_unstr / (pi*(1.65d0*disc%rd)**2.) / disc%h  ! [code unit]
+        rho_unstr = M_unstr / (pi*(1.1d1*disc%rd)**2.) / disc%h  ! [code unit]
         ! cooling timescale
         t_cool_ts = t_cool(diffuse_gas_temp,rho_unstr,Z_unstr)   ! [Gyr]
         if (present(cooling_timescale)) cooling_timescale = t_cool_ts
@@ -881,24 +872,37 @@ contains
 
         implicit none
 
-        real(kind=8)               :: nosfg2sfg_rate         ! the transfer rate
+        real(kind=8)               :: nosfg2sfg_rate  ! the transfer rate
+        real(kind=8)               :: M_str           ! Mass of structured gas
+        real(kind=8)               :: dt
+        real(kind=8)               :: a, b 
 
-        type(disc_type),intent(in) :: disc                   ! the disc component
+        type(disc_type),intent(in) :: disc            ! the disc component
 
         nosfg2sfg_rate = 0.d0 ! init
+        M_str = disc_mass(disc, component='str')
 
-        ! the fragmented NON star-forming gas is converted in fragmented star-forming gas
-        ! according to the balance between the cascade clock and the formation timescale
-        ! the conversion is performed according to the emptying timescale
-        ! this timescale is scaled to 1 Cloud. The rate is therefore build with the mass of 1 Cloud
-        ! The two timescales depend of both the disc-scale height and the gas structuration rate (gas_str_rate)
-        ! The final step of the inertial cascade is reach in a formation timescale
-        if ((disc%t_cascade > disc%t_form) .and. (disc%t_emp .gt. 0.d0)) then
-            !
-            if (disc%h > 0.d0) then
-              nosfg2sfg_rate = Bonnor_Ebert_Mass(1.d0/disc%h)/disc%t_emp
-            end if
-        end if
+		if (disc%h > 0.d0) then
+			!
+			! To be active the cascade mass should at leat be greater the the saturation 
+			! mass of the largest scale
+			if (M_str .gt. Saturation_Mass(1.d0/disc%h, disc%str_rate)) then
+				!
+				! The fragmented NON star-forming gas is converted in fragmented star-forming gas
+				if (disc%gsh_tab%t_cascade .gt. disc%gsh_tab%t_eq) then
+					! The cascade reaches its equilibrium
+					dt = disc%gsh_tab%t_prod
+				else
+					a = (disc%gsh_tab%t_prod - disc%gsh_tab%t_emp) / (disc%gsh_tab%t_eq - disc%gsh_tab%t_form)
+					b = disc%gsh_tab%t_emp - a * disc%gsh_tab%t_form
+					dt = a * disc%gsh_tab%t_cascade + b
+				end if
+
+				if (dt .gt. 0.d0) then
+					nosfg2sfg_rate = min(M_str, Bonnor_Ebert_Mass(1.d0/disc%h)) / dt
+				end if
+			end if
+		end if
 
         return
     end function nosfg2sfg_rate
@@ -1082,10 +1086,10 @@ contains
       ! build the complete gas object
       gas = disc_mass(disc,component='str')*disc_gas_signature(disc,component='str') + &
                 disc_mass(disc,component='sfg')*disc_gas_signature(disc,component='sfg')
-      ! Scale the gas component to a BE mass
-      if (disc%h .gt. 0.d0) then
+      ! Scale the gas component to a BC mass
+      if (disc%ngc .gt. 0) then
         !
-        gas = min(gas_mass(gas),Bonnor_Ebert_Mass(1.d0/disc%h))*gas_signature(gas)
+        gas = 1.d0/real(disc%ngc, kind=8)*gas
         if (gas_mass(gas) > 0.d0) then
             !
             ! We compute here the effective extinction associated to 1 GMC
@@ -1672,7 +1676,7 @@ contains
   subroutine disc_update_inertial_cascade(disc,dt,condensed_mass,disc1,disc2)
 
     ! UPDATE PROPERTIES OF THE GAS INERTIAL CASCADE
-    ! timescales (t_emp, t_form), global effective clock and the number of giant birth clouds
+    ! timescales, global effective clock and the number of giant birth clouds
 
     implicit none
 
@@ -1682,10 +1686,12 @@ contains
     type(disc_type),intent(in),optional :: disc2           ! second progenitor
 
     real(kind=8),intent(in),optional    :: dt              ! the lastest timestep
-    real(kind=8)                        :: M1, M2          ! The total and the latest condensed mass
-    real(kind=8)                        :: mu              ! mass ratio
+    real(kind=8)                        :: M1, M2          ! 
+    real(kind=8)                        :: MBE1, MBE2      ! 
     real(kind=8)                        :: t_emp           ! instantaneous emptying timescale
     real(kind=8)                        :: t_form          ! instantaneous formation timescale
+    real(kind=8)                        :: t_eq            ! instantaneous equilibrium timescale
+    real(kind=8)                        :: t_prod          ! instantaneous production timescale
 
     if ((present(disc1) .and. present(disc2))) then
         !
@@ -1693,42 +1699,24 @@ contains
         M1 = disc_mass(disc1,component='structured')  ! The mass of structured gas into the disc1
         M2 = disc_mass(disc2,component='structured')  ! The mass of structured gas into the disc2
         !
-        ! evaluate the mass merger ratio
-        mu = min(M1, M2)/max(M1, M2)
-        !
-        if (mu .le. epsilon_merge) then
+        ! timescales and clock are just updated according to a mass weighted computation
+        if ((M1 + M2) .gt. 0.d0) then
           !
-          ! Minor merger cases
-          ! timescales and clock are just updated according to a mass weighted computation
-          if ((M1 + M2) .gt. 0.d0) then
-             !
-             disc%t_cascade = (M1*disc1%t_cascade + M2*disc2%t_cascade)/(M1+M2)
-             !
-             disc%t_form = (M1*disc1%t_form + M2*disc2%t_form)/(M1+M2)
-             !
-             disc%t_emp = (M1*disc1%t_emp + M2*disc2%t_emp)/(M1+M2)
-             !
-             disc%ngc = 0
-             if (disc%h > 0.d0) then
-                disc%ngc = int(floor((M1+M2)/Bonnor_Ebert_Mass(1./disc%h)))
-             end if
+          disc%gsh_tab%t_cascade = (M1*disc1%gsh_tab%t_cascade + M2*disc2%gsh_tab%t_cascade)/(M1+M2)
+          !
+          disc%gsh_tab%t_form = (M1*disc1%gsh_tab%t_form + M2*disc2%gsh_tab%t_form)/(M1+M2)
+          !
+          disc%gsh_tab%t_eq = (M1*disc1%gsh_tab%t_eq + M2*disc2%gsh_tab%t_eq)/(M1+M2)
+          !
+          disc%gsh_tab%t_prod = (M1*disc1%gsh_tab%t_prod + M2*disc2%gsh_tab%t_prod)/(M1+M2)
+          !
+          disc%gsh_tab%t_emp = (M1*disc1%gsh_tab%t_emp + M2*disc2%gsh_tab%t_emp)/(M1+M2)
+          !
+          MBE1 = min(M1, Bonnor_Ebert_Mass(1./disc1%h))
+          MBE2 = min(M2, Bonnor_Ebert_Mass(1./disc2%h))
+          if ((disc%h > 0.d0) .and. ((MBE1 + MBE2) > 0.)) then
+             disc%ngc = int((MBE1*float(disc1%ngc) + MBE2*float(disc2%ngc)) / (MBE1 + MBE2))
           end if
-          !
-        else
-          !
-          ! Major merger cases
-          ! During major mergers, it is assumed that all the disc structure is affected
-          ! Inertial cascades are strongly disrupted, and the remanent inertial cascade is initialised.
-          ! Therefore the clock are resetled
-          ! and the timescales are setled to the mas value of the two progenitors
-          ! That ensure the necessary delay for the formation of the new inertial cascade
-          disc%t_cascade = 0.d0
-          !
-          disc%t_form = max(disc1%t_form,disc2%t_form)
-          !
-          disc%t_emp = max(disc1%t_emp,disc2%t_emp)
-          !
-          disc%ngc = 0
         end if
     else
         !
@@ -1739,22 +1727,30 @@ contains
         if ((M1 + M2) .gt. 0.d0) then
           ! update the glogal effective clock of the inertial cascade
           ! it is assumed that the new incoming gas is continuously added
-          ! therefore, in average the new gas has spent dt/2 in the cascade
-          disc%t_cascade = (max(0.d0,M1-M2)*(disc%t_cascade + dt) + dt/2.d0*M2)/M1
+          ! therefore, in average the new gas has already spent dt/2 in the cascade
+          disc%gsh_tab%t_cascade = (max(0.d0,M1-M2)*(disc%gsh_tab%t_cascade + dt) + dt/2.d0*M2)/M1
         end if
         !
-        ! update the effectif formation timescale of the inertial cascade
+        ! update the effective formation timescale of the inertial cascade
         t_form = gas_t_form(disc%str_rate,disc%h)
-        disc%t_form = (max(0.d0,M1-M2)*disc%t_form + M2*t_form)/M1
+        disc%gsh_tab%t_form = (max(0.d0,M1-M2)*disc%gsh_tab%t_form + M2*t_form)/M1
+        !
+        ! update the effective equilibrimum timescale of the inertial cascade
+        t_eq = gas_t_eq(disc%str_rate,disc%h)
+        disc%gsh_tab%t_eq = (max(0.d0,M1-M2)*disc%gsh_tab%t_eq + M2*t_eq)/M1
         !
         ! update the effective emptying timescale of the inertial cascade
         t_emp = gas_t_str(disc%str_rate,disc%h)
-        disc%t_emp = (max(0.d0,M1-M2)*disc%t_emp + M2*t_emp)/M1
+        disc%gsh_tab%t_emp = (max(0.d0,M1-M2)*disc%gsh_tab%t_emp + M2*t_emp)/M1
+        !
+        ! update the effective production timescale of the inertial cascade
+        t_prod = Bonnor_Ebert_Mass(1./disc%h) / gas_mass(disc%str_rate)
+        disc%gsh_tab%t_prod = (max(0.d0,M1-M2)*disc%gsh_tab%t_prod + M2*t_prod)/M1
         !
         ! update the number of giant birth clouds
-        disc%ngc = 0
-        if (disc%h > 0.d0) then
-          disc%ngc = int(floor(M1/Bonnor_Ebert_Mass(1./disc%h)))
+        if ((disc%h > 0.d0) .and. ((disc%ngc .gt. 0) .or. ((disc%ngc == 0) .and. (disc%gsh_tab%t_cascade .gt. disc%gsh_tab%t_form)))) then
+          MBE1 = min(M1, Saturation_Mass(1./disc%h, disc%str_rate))
+          disc%ngc = int(ceiling(MBE1/Bonnor_Ebert_Mass(1./disc%h)))
         end if
     end if
 
@@ -2477,7 +2473,7 @@ contains
      real(kind=8)                         :: disc_velocity_dispersion
      real(kind=8)                         :: M1, M2
      real(kind=8)                         :: Edisp1, Edisp2, Eint, Eturb
-     real(kind=8)                         :: racc, t_dyn_acc
+     real(kind=8)                         :: racc, t_dyn_acc, t_disp
      real(kind=8)                         :: Vacc
      real(kind=8)                         :: fdisp
 
@@ -2502,7 +2498,7 @@ contains
         ! dynamical time
         t_dyn_acc = racc / Vacc
         ! kinetic energy of the accreted gaseous disc
-        fdisp  = min(1.d0, (1.d0/2.d0)*(dt/t_dyn_acc))
+        fdisp  = min(1.d0, (1.d0/3.d0)*(dt/t_dyn_acc))
         Edisp1 = fdisp*5.d-1*gas_mass(accreted_mass)*Vacc**2.
         ! focus only on unstructured gas
         M1 = (1.d0 - accreted_mass%f_str)*M1
@@ -2511,7 +2507,8 @@ contains
         ! we assume that a fraction of the turbulent energy is lost during a orbital time
         ! this routine is called after the update of disc%gsh_tab, we have to remove the latest accreted mass
         M2     = max(0.d0,disc_mass(disc,component='unstr') - M1)
-        fdisp  = (1.d0-min(1.d0,(2.d0/3.d0)*(dt/disc%t_dyn)*slope_limiter(disc%dV,3.d1*sig_star)))
+        t_disp = disc%h / disc%dV
+        fdisp  = (1.d0-min(1.d0,(1.d0/3.d0)*(dt/t_disp)*slope_limiter(disc%dV,3.d1*sig_star)))
         Edisp2 = fdisp*5.d-1*M2*disc%dV**2.
         !
         ! Add a fraction of the gravitatial interaction energy
@@ -2847,10 +2844,10 @@ contains
     !'disc_ngc              ','disc_rd               ','disc_h                ',&
     !'disc_V                ','disc_dV               ','disc_Q                ',&
     !'disc_cool_timescale   ','disc_t_dyn            ','disc_t_cool           ',&
-    !'disc_t_cascade        ','disc_t_form           ','disc_t_emp            ',&
-    !'disc_gas_acc_rate     ','disc_stripping_rate   ','disc_str_rate         ',&
-    !'disc_disrupt_rate     ','disc_nosfg_2_sfg      ','disc_ejecta_rate      ',&
-    !'disc_sfr              ','disc_sfr_burst        '
+    !'disc_t_cascade        ','disc_t_form           ','disc_t_eq             ',&
+    !'disc_t_emp            ','disc_gas_acc_rate     ','disc_stripping_rate   ',&
+    !'disc_str_rate         ','disc_disrupt_rate     ','disc_nosfg_2_sfg      ',&
+    !'disc_ejecta_rate      ','disc_sfr              ','disc_sfr_burst        '/)
 
     unstr_gas = mass_code_unit_in_M_Sun*disc_mass(disc,component='unstr')*disc_gas_signature(disc,component='unstr')
     str_gas   = mass_code_unit_in_M_Sun*(disc_mass(disc,component='str')*disc_gas_signature(disc,component='str') &
@@ -2880,7 +2877,8 @@ contains
                   disc%V*vel_code_unit_2_kmPerSec, &
                   disc%dV*vel_code_unit_2_kmPerSec, &
                   disc%Q, disc%cooling_timescale, disc%t_dyn, disc%t_cool, &
-                  disc%t_cascade, disc%t_form, disc%t_emp, &
+                  disc%gsh_tab%t_cascade, disc%gsh_tab%t_form, &
+                  disc%gsh_tab%t_eq, disc%gsh_tab%t_emp, &
                   mass_rate_code_unit_2_MsunPerYr*gas_mass(disc%fresh_gas_acc_rate), &
                   mass_rate_code_unit_2_MsunPerYr*gas_mass(disc%stripping_rate), &
                   mass_rate_code_unit_2_MsunPerYr*gas_mass(disc%str_rate), &
