@@ -283,25 +283,25 @@ contains
     if (go_down) then 
         !
         ! receive the timestep index
-        call MPI_RECV(u%ts,1,MPI_INTEGER4,rank-1,tree_tag+2,MPI_COMM_WORLD,ierror)
+        call MPI_RECV(u%ts,1,MPI_INTEGER4,rank-1,tree_tag+2,MPI_COMM_WORLD,statut,ierror)
         !
         ! receive the number of computable halo at the current timestep
-        call MPI_RECV(u%nb_of_computable_halos,1,MPI_INTEGER4,rank-1,tree_tag+3,MPI_COMM_WORLD,ierror)
+        call MPI_RECV(u%nb_of_computable_halos,1,MPI_INTEGER4,rank-1,tree_tag+3,MPI_COMM_WORLD,statut,ierror)
         !
         ! receive the expansion factor
         call MPI_RECV(u%aexp,1,MPI_REAL4,rank-1,tree_tag+4,MPI_COMM_WORLD,statut,ierror)
         !
         ! receive the halo identification parameter
-        call MPI_RECV(u%tree(1)%HID,1,MPI_INTEGER8,rank-1,tree_tag+5,MPI_COMM_WORLD,ierror)
+        call MPI_RECV(u%tree(1)%HID,1,MPI_INTEGER8,rank-1,tree_tag+5,MPI_COMM_WORLD,statut,ierror)
         !
         ! receive the host halo identification parameter
-        call MPI_RECV(u%tree(1)%host_HID,1,MPI_INTEGER8,rank-1,tree_tag+6,MPI_COMM_WORLD,ierror)
+        call MPI_RECV(u%tree(1)%host_HID,1,MPI_INTEGER8,rank-1,tree_tag+6,MPI_COMM_WORLD,statut,ierror)
         !
         ! receive the halo level
-        call MPI_RECV(u%tree(1)%level,1,MPI_INTEGER4,rank-1,tree_tag+7,MPI_COMM_WORLD,ierror)
+        call MPI_RECV(u%tree(1)%level,1,MPI_INTEGER4,rank-1,tree_tag+7,MPI_COMM_WORLD,statut,ierror)
         !
         ! receive the number of computed dads
-        call MPI_RECV(u%tree(1)%n_computed_dads,1,MPI_INTEGER4,rank-1,tree_tag+8,MPI_COMM_WORLD,ierror)
+        call MPI_RECV(u%tree(1)%n_computed_dads,1,MPI_INTEGER4,rank-1,tree_tag+8,MPI_COMM_WORLD,statut,ierror)
         !
     end if
             
@@ -458,9 +458,14 @@ contains
       integer(kind=4)                   :: ts                   ! timestep index loop
       integer(kind=4)                   :: ih                   ! halos index loop
       integer(kind=4)                   :: i,j                  ! loop indexes
+      integer(kind=4)                   :: stat                 ! error status for allocate process
+#ifndef UNLINKED_TREES  
+! -------------------------------------------------      
       integer(kind=4)                   :: host                 ! host halo index
       integer(kind=4)                   :: level                ! structure level
-      integer(kind=4)                   :: stat                 ! error status for allocate process
+! -------------------------------------------------   
+#endif         
+! UNLINKED_TREE       
 
       character(MAXPATHSIZE),intent(in) :: tree_structure_file  ! the global file path
 
@@ -2351,8 +2356,12 @@ contains
       
         integer(kind=4),intent(in)    :: ts            ! the time-step
         integer(kind=4),intent(in)    :: ih            ! the halo
+#ifndef UNLINKED_TREES
+! -------------------------------------------------        
         integer(kind=4)               :: host          ! host halo index
-        
+! -------------------------------------------------
+#endif
+! UNLINKED_TREES         
         logical,intent(in)            :: post_merger   ! .true. if the evolution is done onto the remanent structure of a merger
         
         real(kind=8),intent(in)       :: dt            ! the time-step
@@ -2376,7 +2385,7 @@ contains
 ! ------------
 #else
 ! ------------  
-          ! th emodel runs on a set of linked-merger-trees, 
+          ! the model runs on a set of linked-merger-trees, 
           ! i.e. connexions between halo and sub-halo is available.
           ! find the host halo
           host  = univ(ts)%tree(ih)%hosthalo                             

@@ -295,7 +295,7 @@ module IO
       ! if only_rank is given in input of the subroutine
 !~       if (rank .eq. only_rank) then
         if (present(called_by)) write(errunit, '(a,i3.3,a,a)') '|--> <Pr ', rank, '> !!! ERROR !!! | ', trim(called_by)
-        write(errunit,'(a,i3.3,a,a,a,a)') ,'|--> <Pr ', rank, ' / ', trim(current_time), '> ', trim(error_message)
+        write(errunit,'(a,i3.3,a,a,a,a)') '|--> <Pr ', rank, ' / ', trim(current_time), '> ', trim(error_message)
 !~       endif
     else
       if (main_process) then
@@ -353,7 +353,7 @@ module IO
       ! if only_rank is given in input of the subroutine
       if (rank .eq. only_rank) then
         if (present(called_by)) write(errunit, '(a,i3.3,a,a)') '|--> <Pr ', rank, '> !!! WARNING !!! | ', trim(called_by)
-        write(u,'(a,i3.3,a,a,a,a)') ,'|--> <Pr ', rank, ' / ', trim(current_time), '> ', trim(warning_message)
+        write(u,'(a,i3.3,a,a,a,a)') '|--> <Pr ', rank, ' / ', trim(current_time), '> ', trim(warning_message)
       endif
     else
       if (main_process) then

@@ -14,7 +14,7 @@ module bulge
   !
   !  In the header of the module are defined output properties of the bulge component (labels, units and formats).
   !  The bulge module contains the defintion of this structure and all functions and subroutines associated to the bulge structure.
-  !  In the current model, the bulge component is considered as a passive component, gas is only considered as non-star-forming gas
+  !  In the current model, the bulge component is considered as a passive component, gas is only considered as a diffuse gas component
   !  The gas contained in the bulge comes from the stellar evolution cycle. 
   !  During a merger event, all the gas produced by stars in the bulge is transfered to the diffuse disc gas component
   !  The bulge evolution procedure is divided in two processes, bulge_evolve_I and bulge_evolve_II 
@@ -69,7 +69,7 @@ module bulge
     real(kind=8)      :: age_form  ! age of the universe when the first bulge has been formed
     !
     ! main components
-    type(gas_type)    :: no_sfg    ! a no star forming gas (gas coming from stellar wind produced by stars evolving in the bulge)                     
+    type(gas_type)    :: gas       ! a diffuse gascomponent  (gas coming from stellar wind produced by stars evolving in the bulge)                     
     type(stars_type)  :: stars     ! the stellar component
     type(dust_type)   :: dust      ! the dust component
     ! bulge properties
@@ -211,7 +211,7 @@ contains
     bulge%age_form          = 0.d0                ! will be set in galaxy_merge
     !
     ! main components
-    call gas_void(bulge%no_sfg)                   ! void the diffuse gas phase
+    call gas_void(bulge%gas)                      ! void the diffuse gas phase
     call stars_void(bulge%stars)                  ! void the stellar component
     call dust_void(bulge%dust,init_geom='dwek  ') ! void and init the dust component
     ! bulge properties
@@ -238,7 +238,7 @@ contains
     bulge1%age_form          = bulge2%age_form   
     !
     ! main components 
-    call gas_copy(bulge1%no_sfg,bulge2%no_sfg) 
+    call gas_copy(bulge1%gas,bulge2%gas) 
     call stars_copy(bulge1%stars,bulge2%stars) 
     call dust_copy(bulge1%dust,bulge2%dust)
     !
@@ -288,7 +288,7 @@ contains
     ! In the bulge evolution scheme, the gas evolving into the bulge is only produced by stellar evolution, 
     !
     call gas_void(void)
-    dt_gas = gas_dt_optim(bulge%no_sfg,bulge%stars%loss_rate,void,called_by='bulge_evolve_I')
+    dt_gas = gas_dt_optim(bulge%gas,bulge%stars%loss_rate,void,called_by='bulge_evolve_I')
     !
     ! *****************************
     ! STARS
@@ -365,7 +365,7 @@ contains
     implicit none
         
     real(kind=8),intent(in)           :: dt                    ! the evolution time-step
-    real(kind=8)                      :: Unosfg, dU            ! mass variation test
+    real(kind=8)                      :: Ugas, dU            ! mass variation test
 
     type(gas_type)                    :: loss_rate_prior       ! mass loss rate used as prior value in bulge_evolve_I
     type(gas_type)                    :: loss_rate             ! effective stellar mass loss rate
@@ -393,7 +393,7 @@ contains
             if (FOLLOW_UP .and. PR_FOLLOW_UP) call bulge_print(follow_up_unit(current_index),'fits',bulge)
         end if
         !
-        Unosfg = bulge_mass(bulge,component='nosfg')
+        Ugas = bulge_mass(bulge,component='all')
         !
         ! *****************************
         ! STARS
@@ -407,20 +407,20 @@ contains
         ! GAS
         ! *****************************
         ! 
-        ! Add gas ejected by stars to the diffuse gas reservoir (no_sfg)
-        call gas_add(bulge%no_sfg,loss_rate*dt)
+        ! Add gas ejected by stars to the diffuse gas reservoir (gas)
+        call gas_add(bulge%gas,loss_rate*dt)
         !
         ! Test nosfg mass variation
-        if (Unosfg .gt. M_gas_min) then
+        if (Ugas .gt. M_gas_min) then
             !
-            dU = abs(bulge_mass(bulge,component='nosfg')-Unosfg)
-            if ((abs(dU)/Unosfg) .gt. physical_precision) then
+            dU = abs(bulge_mass(bulge,component='all')-Ugas)
+            if ((abs(dU)/Ugas) .gt. physical_precision) then
               !
               call IO_print_error_message('No quasi-static state of the nosfg component',only_rank=rank,called_by='bulge_evolve_II')
               call IO_print_message('with',only_rank=rank,component='bulge', &
                           param_name = (/'dU/U (%)                 ','U                        ','dU                       ',&
                                          'loss_rate_prior          ','loss_rate                '/), &
-                          real_param_val = (/1.d2*dU/Unosfg,Unosfg,dU,gas_mass(loss_rate_prior),gas_mass(loss_rate)/))
+                          real_param_val = (/1.d2*dU/Ugas,Ugas,dU,gas_mass(loss_rate_prior),gas_mass(loss_rate)/))
               stop  ! stop the program
             end if
         end if
@@ -430,7 +430,7 @@ contains
         ! *****************************
         ! evolve dust properties
         ! dust_evolve(d,gas,rc,incl), rc is the half mass radius
-        call dust_evolve(bulge%dust,bulge%no_sfg,(1.d0+sqrt(2.d0))*bulge%rb)
+        call dust_evolve(bulge%dust,bulge%gas,(1.d0+sqrt(2.d0))*bulge%rb)
         !
         ! *****************************
         ! SET bulge PROPERTIES
@@ -476,7 +476,6 @@ contains
   function bulge_mass(bulge,r,component)
     
     ! RETURN THE TOTAL BULGE MASS
-    ! component is : no_sfg, all_gas or stars
     ! if r is present, return mass enclosed in the radius r
     
     implicit none
@@ -489,15 +488,15 @@ contains
 
     type(bulge_type),intent(in)       :: bulge        ! a bulge component 
     
-    bulge_mass = gas_mass(bulge%no_sfg) + stars_mass(bulge%stars)
+    bulge_mass = gas_mass(bulge%gas) + stars_mass(bulge%stars)
     
     if (bulge_mass .le. 0.d0) return ! no bulge
     
     if (present(component)) then
        !
        select case (trim(component)) 
-       case ('no_sfg','all_gas','gas','nosfg')
-          bulge_mass = gas_mass(bulge%no_sfg)
+       case ('gas','all','diffuse')
+          bulge_mass = gas_mass(bulge%gas)
        case ('stars')
           bulge_mass = stars_mass(bulge%stars)
        case default
@@ -507,7 +506,7 @@ contains
        end select
     else
        !
-       bulge_mass = gas_mass(bulge%no_sfg) + stars_mass(bulge%stars)
+       bulge_mass = gas_mass(bulge%gas) + stars_mass(bulge%stars)
     end if
     !
     ! ADAPT TO THE RADIUS R 
@@ -532,7 +531,7 @@ contains
       call IO_print_error_message('bulge_mass is NaN',only_rank=rank,called_by='bulge_mass')  
       call IO_print_message('with',only_rank=rank,component='bulge', &
                param_name = (/'non-sfg                  ','stars                    '/), &
-               real_param_val  = (/gas_mass(bulge%no_sfg),stars_mass(bulge%stars)/))  
+               real_param_val  = (/gas_mass(bulge%gas),stars_mass(bulge%stars)/))  
       stop  ! stop the program
     end if
       
@@ -557,10 +556,8 @@ contains
     if (present(component)) then
         !
         select case (trim(component)) 
-        case ('no_sfg','nosfg')
-            bulge_gas_signature = gas_signature(bulge%no_sfg)
-        case ('all_gas','gas')
-            bulge_gas_signature = gas_signature(bulge%no_sfg)
+        case ('gas','all','diffuse')
+            bulge_gas_signature = gas_signature(bulge%gas)
         case default
             write(message,'(a,a,a)') 'Keyword ', trim(component), ' not defined'
             call IO_print_error_message(message,only_rank=rank,called_by='bulge_gas_signature')    
@@ -569,7 +566,7 @@ contains
     else
         !
         ! use all gas as defaut value
-        bulge_gas_signature = gas_signature(bulge%no_sfg)
+        bulge_gas_signature = gas_signature(bulge%gas)
     end if
         
     return
@@ -760,19 +757,18 @@ contains
     call dust_load_dust_data(bulge%dust,dust_data)
 
     ! For information
-    !'bulge_age_form        ','bulge_no_sfg          ','bulge_mZ              ', &
+    !'bulge_age_form        ','bulge_gas          ','bulge_mZ              ', &
     !'bulge_mH              ','bulge_mC              ','bulge_mN              ', &
     !'bulge_mO              ','bulge_mFe             ','bulge_m_stars         ', &
     !'bulge_rb              ','bulge_t_dyn           ','bulge_dV              '
     
-    bulge_data = (/bulge%age_form, mass_code_unit_in_M_Sun*gas_mass(bulge%no_sfg), &
-                   mass_code_unit_in_M_Sun*gas_mass(bulge%no_sfg,component='Metals'), &
-                   mass_code_unit_in_M_Sun*gas_mass(bulge%no_sfg,component='H1'), &
-                   mass_code_unit_in_M_Sun*gas_mass(bulge%no_sfg,component='C12'), &
-                   mass_code_unit_in_M_Sun*gas_mass(bulge%no_sfg,component='N14'), &
-                   mass_code_unit_in_M_Sun*gas_mass(bulge%no_sfg,component='O16'), &
-                   mass_code_unit_in_M_Sun*gas_mass(bulge%no_sfg,component='Fe56'), &
-                   12.d0 + log10(O_H(bulge%no_sfg)), & 
+    bulge_data = (/bulge%age_form, mass_code_unit_in_M_Sun*gas_mass(bulge%gas), &
+                   mass_code_unit_in_M_Sun*gas_mass(bulge%gas,component='Metals'), &
+                   mass_code_unit_in_M_Sun*gas_mass(bulge%gas,component='H1'), &
+                   mass_code_unit_in_M_Sun*gas_mass(bulge%gas,component='C12'), &
+                   mass_code_unit_in_M_Sun*gas_mass(bulge%gas,component='N14'), &
+                   mass_code_unit_in_M_Sun*gas_mass(bulge%gas,component='O16'), &
+                   mass_code_unit_in_M_Sun*gas_mass(bulge%gas,component='Fe56'), 12.d0 + log10(O_H(bulge%gas)), &
                    bulge%rb, bulge%t_dyn, bulge%dV*vel_code_unit_2_kmPerSec,starsb_data,dust_data/)
 
     return
