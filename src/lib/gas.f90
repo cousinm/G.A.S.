@@ -410,7 +410,7 @@ contains
     implicit none
 
     M_gas_min  = 5.d-1 * baryon_fraction * dm_particle_mass
-    M_gas_crit = 1.d-2 * M_gas_min
+    M_gas_crit = 1.d-3 * M_gas_min
     M_gas_null = 1.d-11
 
     call IO_print_message('use',param_name=(/'M_gas_min [Msun]         ','M_gas_crit [Msun]        ','M_gas_null [Msun]        '/), &
