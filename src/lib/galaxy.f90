@@ -907,8 +907,8 @@ contains
     real(kind=8)                    :: Mprog1, Mprog2
     real(kind=8)                    :: error
 
-    type(gas_type)                  :: nosfg_from_bulges ! gas transfered from bulges (1 &2) to the new gaseous disc
-    type(gas_type)                  :: nosfg_in_torus    ! gas added to the AGN torus
+    type(gas_type)                  :: unstr_from_bulges ! gas transfered from bulges (1 &2) to the new gaseous disc
+    type(gas_type)                  :: unstr_in_torus    ! gas added to the AGN torus
     type(gas_type)                  :: gas               ! a gas component
     type(stars_type)                :: stars_tmp         ! A local copy of the global disc and bulge stellar population
 
@@ -929,8 +929,8 @@ contains
     Mprog1 = galaxy_mass(gal1)
     Mprog2 = galaxy_mass(gal2)
     ! init
-    call gas_void(nosfg_from_bulges)
-    call gas_void(nosfg_in_torus)
+    call gas_void(unstr_from_bulges)
+    call gas_void(unstr_in_torus)
     !
     if (Mprog1 .gt. 0.d0) then
       ! the first galaxy exist
@@ -995,7 +995,7 @@ contains
           gal%bulge%rb = gal%bulge%rb/(1.d0+sqrt(2.d0))                          ! bulge scale radius
           ! compute exponential radius of the remnant disc
           gal%disc%rd = (M1*gal1%disc%rd + M2*gal2%disc%rd)/(M1+M2)    ! mass weighted exponential radius
-          gal%disc%rd = min(gal%disc%rd/2.d0,dm1%spin*dm1%R_vir/sqrt(2.d0)) ! max value with dm spin properties
+          gal%disc%rd = max(gal%disc%rd,dm1%spin*dm1%R_vir/sqrt(2.d0)) ! max value with dm spin properties
           ! compute the new disc inclination
           call disc_compute_inclination(gal%disc,dm1,disc1=gal1%disc,disc2=gal2%disc,mu=mu)
           !
@@ -1032,7 +1032,7 @@ contains
         ! @ this point the new caracteristics of the remnant disc are computed and save in gal%disc
         ! in the two cases, minor or major mergers,
         ! all gas components coming from the two progenitors are added. They form a new gas disc
-        nosfg_from_bulges = gal1%bulge%no_sfg + gal2%bulge%no_sfg
+        unstr_from_bulges = gal1%bulge%gas + gal2%bulge%gas
         !
         ! AGN
         if ((agn_mass(gal1%disc%agn) .gt. 0.d0) .or. (agn_mass(gal2%disc%agn) .gt. 0.d0)) then
@@ -1061,10 +1061,10 @@ contains
             gas =  disc_mass(gal1%disc,r=3.d0*r_torus,component='unstr')*disc_gas_signature(gal1%disc,component='unstr') + &
                     disc_mass(gal2%disc,r=3.d0*r_torus,component='unstr')*disc_gas_signature(gal2%disc,component='unstr')
             if (gas_mass(gas) .gt. M_BH_min) then
-                nosfg_in_torus = 1.d-1*mu*mu_gas*gas
+                unstr_in_torus = 1.d-1*mu*mu_gas*gas
                 ! this gas will be substracted in disc_update_gas_struct_history
                 ! feed the gas torus
-                call agn_add_torus_mass(gal%disc%agn,nosfg_in_torus)
+                call agn_add_torus_mass(gal%disc%agn,unstr_in_torus)
             end if
             !
             ! set the new dynamical time of the accretion process
@@ -1074,8 +1074,8 @@ contains
         !
         ! Gas structuration history
         call disc_update_gas_struct_history(gal%disc,disc1=gal1%disc,disc2=gal2%disc, &
-                    nosfg_from_bulges=nosfg_from_bulges, &
-                    nosfg_in_torus=nosfg_in_torus)
+                    unstr_from_bulges=unstr_from_bulges, &
+                    unstr_in_torus=unstr_in_torus)
         !
         ! Update morphology of the disc
         gal%disc%morpho = disc_update_morpho(gal1%disc,gal2%disc)
@@ -1091,19 +1091,17 @@ contains
         ! update cooling clock
         call disc_update_cooling_clock(gal%disc,disc1=gal1%disc,disc2=gal2%disc)
         ! computed the orbital velocity at the half mass radius
-        gal%disc%V         = disc_velocity(1.68d0*gal%disc%rd,dm1,gal%disc,gal%bulge)   !disc_mass_weighted_orbital_velocity(gal%disc,dm1,gal%bulge)
+        gal%disc%V         = disc_velocity(1.68d0*gal%disc%rd,dm1,gal%disc,gal%bulge)   
         ! compute the epicyclic frequency at the disc half mass radius
-        gal%disc%kappa     = disc_kappa(1.68d0*gal%disc%rd,dm1,gal%disc,gal%bulge)      !disc_mass_weighted_kappa(1.d1*disc%rd,dm,disc,bulge)
+        gal%disc%kappa     = disc_kappa(1.68d0*gal%disc%rd,dm1,gal%disc,gal%bulge)      
         ! update the structuration fraction
         gal%disc%f_str     = disc_gas_fraction(gal%disc,component='structured')
         ! computed dynamical time
         gal%disc%t_dyn     = disc_dynamical_time(gal%disc,dm1,gal%bulge)
         ! compute velocity dispersion
-        gal%disc%dV        = disc_velocity_dispersion(gal1%disc,disc2=gal2%disc)
+        gal%disc%dV        = disc_update_velocity_dispersion(gal1%disc,disc2=gal2%disc)
         ! compute the scale height of the disc
         gal%disc%h         = disc_scale_height(gal%disc)
-        ! compute star formation timescale
-        gal%disc%t_sf      = disc_star_formation_timescale()
         ! update inertial cascade properties t_emp, t_form, t_cascade, ngc
         call disc_update_inertial_cascade(gal%disc,disc1=gal1%disc,disc2=gal2%disc)
         !

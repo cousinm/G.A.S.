@@ -17,11 +17,7 @@ module gas
   !
   !  gas_read_gas_properties           : Read gas properties (Metallicity bins, Initial abundances etc ...)
   !
-  !  gas_read_emptying_timescale       : Read the gas emptying timescale table
-  !
-  !  gas_read_formation_timescale      : Read the gas formation timescale table
-  !
-  !  gas_read_equilibrium_timescale    : Read the gas equilibrium timescale table
+  !  gas_read_timescales               : Read the inertial gas cascade timescale tables
   !
   !  gas_set_reference_mass            : Initialize gas reference mass : M_gas_min
   !
@@ -85,11 +81,7 @@ module gas
   !
   !  O_Fe                              : return the Oxygen/Iron mass ratio
   !
-  !  gas_t_str                         : return the structuration timescale of the inertial cascade
-  !
-  !  gas_t_form                        : return the formation timescale of the interial cascade
-  !
-  !  gas_t_eq                          : return the equilibrium timescale of the inertial cascade
+  !  gas_timescales                    : return a specific timescale of the inertial cascade
   !
   !  Bonnor_Ebert_Mass                 : return the Bonnor Ebert mass of the current largest scale of the disc
   !
@@ -314,9 +306,9 @@ contains
 
   !*****************************************************************************************************************
 
-  subroutine gas_read_emptying_timescale
+  subroutine gas_read_timescales
 
-    ! LOAD GAS STRUCTURATION TIMESCALE
+    ! LOAD GAS INERTIAL CASCADE TIMESCALES
 
      integer(kind=4)          :: m,l ! loop indexes (accretion rate and disc scaleheight)
 
@@ -324,10 +316,10 @@ contains
     character(MAXPATHSIZE)   :: line
     character(MAXPATHSIZE)   :: message
 
-    call IO_print_message('gas_read_emptying_timescale')
+    call IO_print_message('gas_read_timescales')
 
-    write(filename,'(a,a,a,a)') trim(input_path), '/gas_emptying_timescale.in'
-    write(message,'(a,a,a,a)') 'Load data from : ', 'gas_emptying_timescale.in'
+    write(filename,'(a,a,a,a)') trim(input_path), '/gas_timescales.in'
+    write(message,'(a,a,a,a)') 'Load data from : ', 'gas_timescales.in'
     call IO_print_message(message)
 
     if (main_process .or. physical_process) then
@@ -356,6 +348,8 @@ contains
                  ! allocate arrays
                  allocate(AccRateBins(nAccRateBins))
                  allocate(DiscScaleBins(nDiscScaleBins))
+                 allocate(t_form(nAccRateBins,nDiscScaleBins))
+                 allocate(t_eq(nAccRateBins,nDiscScaleBins))
                  allocate(t_str(nAccRateBins,nDiscScaleBins))
                  ! load accretion rates and disc scales
                  read(gasprop_unit,*) AccRateBins
@@ -366,8 +360,25 @@ contains
                  ! save minimum values
                  AccRatemin   = minval(AccRateBins)
                  DiscScalemin = minval(DiscScaleBins)
-                 read(gasprop_unit,*)
-                 ! read structuration time (in log)
+                 !
+                 read(gasprop_unit,*) ! a blanck line
+                 ! read formation timescale (in log)
+                 do m = 1, nAccRateBins
+                    read(gasprop_unit,*) (t_form(m,l), l=1,nDiscScaleBins)
+                 end do
+                 ! set t_form_max
+                 t_form_max = 10.**maxval(t_form) ! in Gyr
+                 !
+                 read(gasprop_unit,*) ! a blanck line
+                 ! read equilibrium timescale (in log)
+                 do m = 1, nAccRateBins
+                    read(gasprop_unit,*) (t_eq(m,l), l=1,nDiscScaleBins)
+                 end do
+                 ! set t_form_max
+                 t_eq_max = 10.**maxval(t_eq) ! in Gyr
+                 !
+                 read(gasprop_unit,*) ! a blanck line
+                 ! read structuration/emptying time (in log)
                  do m = 1, nAccRateBins
                     read(gasprop_unit,*) (t_str(m,l), l=1,nDiscScaleBins)
                  end do
@@ -379,7 +390,7 @@ contains
           if (line(1:1) .eq. '#') then
             cycle ! header or something like this (skip)
           else
-            call IO_print_error_message('Impossible to read the line',only_rank=rank,called_by='gas_read_emptying_timescale')
+            call IO_print_error_message('Impossible to read the line',only_rank=rank,called_by='gas_read_timescales')
             write(*,*) trim(line)
             stop ! stop the program
           end if
@@ -388,125 +399,7 @@ contains
     end if
 
     return
-  end subroutine gas_read_emptying_timescale
-
-  !*****************************************************************************************************************
-
-  subroutine gas_read_formation_timescale
-
-    ! LOAD GAS FORMATION TIMESCALE
-
-     integer(kind=4)          :: m,l ! loop indexes (accretion rate and disc scaleheight)
-
-    character(MAXPATHSIZE)   :: filename
-    character(MAXPATHSIZE)   :: line
-    character(MAXPATHSIZE)   :: message
-
-    call IO_print_message('gas_read_formation_timescale')
-
-    write(filename,'(a,a,a,a)') trim(input_path), '/gas_formation_timescale.in'
-    write(message,'(a,a,a,a)') 'Load data from : ', 'gas_formation_timescale.in'
-    call IO_print_message(message)
-
-    if (main_process .or. physical_process) then
-       ! Open the "gas properties" file
-       open(unit = gasprop_unit, file = filename, status = 'old')
-       !
-       do
-          read(gasprop_unit, '(a)', end = 2) line
-          if (trim(line) .eq. 'START') then
-             read(gasprop_unit,*) ! already read
-             read(gasprop_unit,*) ! already read
-             read(gasprop_unit,*) ! already read
-             if (physical_process) then
-                 read(gasprop_unit,*) ! already read
-                 ! allocate arrays
-                 allocate(t_form(nAccRateBins,nDiscScaleBins))
-                 ! load accretion rates and disc scales
-                 read(gasprop_unit,*) ! already read
-                 read(gasprop_unit,*) ! already read
-                 read(gasprop_unit,*) ! blank line
-                 ! read formation timescale (in log)
-                 do m = 1, nAccRateBins
-                    read(gasprop_unit,*) (t_form(m,l), l=1,nDiscScaleBins)
-                 end do
-                 ! set t_form_max
-                 t_form_max = 10.**maxval(t_form) ! in Gyr
-              end if
-              exit  ! quit do loop
-          end if
-          if (line(1:1) .eq. '#') then
-            cycle ! header or something like this (skip)
-          else
-            call IO_print_error_message('Impossible to read the line',only_rank=rank,called_by='gas_read_formation_timescale')
-            write(*,*) trim(line)
-            stop ! stop the program
-          end if
-       end do
-2      close(gasprop_unit)
-    end if
-
-    return
-  end subroutine gas_read_formation_timescale
-
-  !*****************************************************************************************************************
-
-  subroutine gas_read_equilibrium_timescale
-
-    ! LOAD GAS EQUILIBRIUM TIMESCALE
-
-     integer(kind=4)          :: m,l ! loop indexes (accretion rate and disc scaleheight)
-
-    character(MAXPATHSIZE)   :: filename
-    character(MAXPATHSIZE)   :: line
-    character(MAXPATHSIZE)   :: message
-
-    call IO_print_message('gas_read_equilibrium_timescale')
-
-    write(filename,'(a,a,a,a)') trim(input_path), '/gas_equilibrium_timescale.in'
-    write(message,'(a,a,a,a)') 'Load data from : ', 'gas_equilibrium_timescale.in'
-    call IO_print_message(message)
-
-    if (main_process .or. physical_process) then
-       ! Open the "gas properties" file
-       open(unit = gasprop_unit, file = filename, status = 'old')
-       !
-       do
-          read(gasprop_unit, '(a)', end = 2) line
-          if (trim(line) .eq. 'START') then
-             read(gasprop_unit,*) ! already read
-             read(gasprop_unit,*) ! already read
-             read(gasprop_unit,*) ! already read
-             if (physical_process) then
-                 read(gasprop_unit,*) ! already read
-                 ! allocate arrays
-                 allocate(t_eq(nAccRateBins,nDiscScaleBins))
-                 ! load accretion rates and disc scales
-                 read(gasprop_unit,*) ! already read
-                 read(gasprop_unit,*) ! already read
-                 read(gasprop_unit,*) ! blank line
-                 ! read formation timescale (in log)
-                 do m = 1, nAccRateBins
-                    read(gasprop_unit,*) (t_eq(m,l), l=1,nDiscScaleBins)
-                 end do
-                 ! set t_form_max
-                 t_eq_max = 10.**maxval(t_eq) ! in Gyr
-              end if
-              exit  ! quit do loop
-          end if
-          if (line(1:1) .eq. '#') then
-            cycle ! header or something like this (skip)
-          else
-            call IO_print_error_message('Impossible to read the line',only_rank=rank,called_by='gas_read_equilibrium_timescale')
-            write(*,*) trim(line)
-            stop ! stop the program
-          end if
-       end do
-2      close(gasprop_unit)
-    end if
-
-    return
-  end subroutine gas_read_equilibrium_timescale
+  end subroutine gas_read_timescales
   
   !*****************************************************************************************************************
 
@@ -552,7 +445,7 @@ contains
     gas%Temp  = -1.d0  ! not already setled
     gas%mass  = 0.d0   ! no mass
     gas%mZ    = 0.d0   ! no mass
-    gas%f_str = 0.d0
+    gas%f_str = 0.d0   ! fraction of structured gas
     if (.not. allocated(gas%elts)) then
        allocate(gas%elts(nElts))
     end if
@@ -591,15 +484,11 @@ contains
 
   !***********************************************************************************************************
 
-  subroutine gas_void_gsh(gsh,nlevels)
+  subroutine gas_void_gsh(gsh)
 
     ! SET TO NULL ALL CELLS OF ALL FIELDS OF A GAS STRUCTURATION HISTORY TAB
 
     implicit none
-
-    integer(kind=4),intent(in),optional :: nlevels ! number of intermediate level
-                                                   ! a gsh_tab is indexed from 0 to nlevel+1 and therefore contains ncells = nlevel+2
-    integer(kind=4)                     :: n
 
     type(gsh_type), intent(inout)       :: gsh
 
@@ -608,23 +497,23 @@ contains
         call gas_deallocate_gsh(gsh)
     endif
 
-	! Init timescales
-	gsh%t_cascade =  0.d0
+    ! Init timescales
+    gsh%t_cascade =  0.d0
     gsh%t_form    =  0.d0
     gsh%t_eq      =  0.d0
     gsh%t_prod    =  0.d0
     gsh%t_emp     =  0.d0
    
-    ! By default the gas structuration history contain the diffuse, the structured and the star forming cells
-    n = 1
-    if (present(nlevels)) n = nlevels+1
+    ! By default the gas structuration history contain the diffuse, the structured/fragmented gas cells
+    ! 1 : unstructured / diffuse gas
+    ! 2 : structured / fragmented gas 
 
-    if (.not. allocated(gsh%gas)) allocate(gsh%gas(0:n))            ! create
-    call gas_void_array(gsh%gas)                                    ! and init
-    if (.not. allocated(gsh%in_rate)) allocate(gsh%in_rate(0:n))    ! create
-    call gas_void_array(gsh%in_rate)                                ! and init
-    if (.not. allocated(gsh%out_rate)) allocate(gsh%out_rate(0:n))  ! create
-    call gas_void_array(gsh%out_rate)                               ! and init
+    if (.not. allocated(gsh%gas)) allocate(gsh%gas(2))            ! create
+    call gas_void_array(gsh%gas)                                  ! and init
+    if (.not. allocated(gsh%in_rate)) allocate(gsh%in_rate(2))    ! create
+    call gas_void_array(gsh%in_rate)                              ! and init
+    if (.not. allocated(gsh%out_rate)) allocate(gsh%out_rate(2))  ! create
+    call gas_void_array(gsh%out_rate)                             ! and init
 
     return
   end subroutine gas_void_gsh
@@ -790,7 +679,7 @@ contains
     type(gsh_type), intent(inout)  :: gsh1  ! a gas structuration history table
     type(gsh_type), intent(in)     :: gsh2  ! an other gas structuration history table
 
-	! Copy timescales
+    ! Copy timescales
     gsh1%t_cascade = gsh2%t_cascade  ! Inertial cascade clock
     gsh1%t_form = gsh2%t_form ! Inertial cascade formation timescale
     gsh1%t_eq = gsh2%t_eq ! Inertial cascade equilibrium timescale
@@ -1483,7 +1372,7 @@ contains
         found = .false.
         ! select the specific component
         select case (trim(component))
-        case ('all_mass','gas','mass')
+        case ('all','gas','mass')
             gas_mass = gas%mass
             found = .true.
         case ('Metals','metals','mZ')
@@ -1781,22 +1670,26 @@ contains
 
   !*****************************************************************************************************************
 
-   function gas_t_str(acc_rate,h)
+   function gas_timescales(acc_rate,h,timescale)
 
-    ! Return the gas structuration time-scale as a function of the gas accretion rate and the disc scale height
+    ! Return one of specific timescale of the inertial cascade 
+    ! as a function of the gas accretion rate and the disc scale height
     ! The output is given in Gyr
 
     implicit none
 
-    real(kind=8),intent(in)              :: h           ! the disc scale height [kpc]
-    real(kind=8)                         :: gas_t_str   ! The gas structuration time scale [Gyr]
-    real(kind=8)                         :: log_acc_rate
-    real(kind=8)                         :: log_h
+    character(*),intent(in)     :: timescale       ! selection of the timescale
+    character(MAXPATHSIZE)      :: message         ! a message to display
+    
+    real(kind=8),intent(in)     :: h               ! the disc scale height [kpc]
+    real(kind=8)                :: gas_timescales  ! The gas structuration time scale [Gyr]
+    real(kind=8)                :: log_acc_rate
+    real(kind=8)                :: log_h
 
-    type(gas_type),intent(in)            :: acc_rate    ! the accretion rate onto the largest structure [10^11 Msun/Gyr]
+    type(gas_type),intent(in)   :: acc_rate        ! the accretion rate onto the largest structure [10^11 Msun/Gyr]
 
     ! init to the maximaum value
-    gas_t_str = t_str_max
+    gas_timescales = t_str_max
 
     ! Accretion rate
     !
@@ -1809,103 +1702,37 @@ contains
         if (h .gt. 0.d0) then
             log_h = log10(h)
             !
-            ! Structuration timescale
-            ! load log(t_str)
-            gas_t_str = locate2D(log_acc_rate,log_h,t_str, &
-                            nAccRateBins,nDiscScaleBins, &
-                            AccRatemin,DiscScalemin, &
-                            dlAccRate,dlDiscScale)
-            gas_t_str = (1.d1)**gas_t_str ! in Gyr
+            select case(timescale)
+            case ('structuration','str','frag')
+                ! Structuration timescale
+                gas_timescales = locate2D(log_acc_rate,log_h,t_str, &
+                                nAccRateBins,nDiscScaleBins, &
+                                AccRatemin,DiscScalemin, &
+                                dlAccRate,dlDiscScale)
+            case ('formation','form')
+                ! Structuration timescale
+                gas_timescales = locate2D(log_acc_rate,log_h,t_form, &
+                                nAccRateBins,nDiscScaleBins, &
+                                AccRatemin,DiscScalemin, &
+                                dlAccRate,dlDiscScale)  
+            case ('equilibrium','eq')
+                ! Structuration timescale
+                gas_timescales = locate2D(log_acc_rate,log_h,t_eq, &
+                                nAccRateBins,nDiscScaleBins, &
+                                AccRatemin,DiscScalemin, &
+                                dlAccRate,dlDiscScale)              
+            case default
+                write(message,'(a,a,a)') 'Keyword ', trim(timescale), ' not defined'
+                call IO_print_error_message(message,only_rank=rank,called_by='gas_timescales')
+                stop  ! stop the program
+            end select                
+            gas_timescales = (1.d1)**gas_timescales ! in Gyr
         end if
     end if
 
     return
-  end function gas_t_str
+  end function gas_timescales
 
-  !*****************************************************************************************************************
-
-   function gas_t_form(acc_rate,h)
-
-    ! Return the gas cascade formation time-scale as a function of the gas accretion rate and the disc scale height
-    ! The output is given in Gyr
-
-    implicit none
-
-    real(kind=8),intent(in)              :: h           ! the disc scale height [kpc]
-    real(kind=8)                         :: gas_t_form  ! The cascade formation time scale [Gyr]
-    real(kind=8)                         :: log_acc_rate
-    real(kind=8)                         :: log_h
-
-    type(gas_type),intent(in)            :: acc_rate    ! the accretion rate onto the largest structure [10^11 Msun/Gyr]
-
-    ! init to the maximaum value
-    gas_t_form = t_form_max
-
-    ! Accretion rate
-    !
-    log_acc_rate = gas_mass(acc_rate) ! in code unit
-    if (log_acc_rate .gt. 0.d0) then
-        log_acc_rate = log10(log_acc_rate)
-        !
-        ! Disc scale height
-        !
-        if (h .gt. 0.d0) then
-            log_h = log10(h)
-            !
-            ! Formation timescale
-            gas_t_form = locate2D(log_acc_rate,log_h,t_form, &
-                            nAccRateBins,nDiscScaleBins, &
-                            AccRatemin,DiscScalemin, &
-                            dlAccRate,dlDiscScale)
-            gas_t_form = (1.d1)**gas_t_form ! in Gyr
-        end if
-    end if
-
-    return
-  end function gas_t_form
-
-!*****************************************************************************************************************
-
-   function gas_t_eq(acc_rate,h)
-
-    ! Return the gas equilibrium time-scale as a function of the gas accretion rate and the disc scale height
-    ! The output is given in Gyr
-
-    implicit none
-
-    real(kind=8),intent(in)              :: h           ! the disc scale height [kpc]
-    real(kind=8)                         :: gas_t_eq    ! The gas equilibrium time scale [Gyr]
-    real(kind=8)                         :: log_acc_rate
-    real(kind=8)                         :: log_h
-
-    type(gas_type),intent(in)            :: acc_rate    ! the accretion rate onto the largest structure [10^11 Msun/Gyr]
-
-    ! init to the maximaum value
-    gas_t_eq = t_eq_max
-
-    ! Accretion rate
-    !
-    log_acc_rate = gas_mass(acc_rate) ! in code unit
-    if (log_acc_rate .gt. 0.d0) then
-        log_acc_rate = log10(log_acc_rate)
-        !
-        ! Disc scale height
-        !
-        if (h .gt. 0.d0) then
-            log_h = log10(h)
-            !
-            ! Equilibrium timescale
-            gas_t_eq = locate2D(log_acc_rate,log_h,t_eq, &
-                            nAccRateBins,nDiscScaleBins, &
-                            AccRatemin,DiscScalemin, &
-                            dlAccRate,dlDiscScale)
-            gas_t_eq = (1.d1)**gas_t_eq ! in Gyr
-        end if
-    end if
-
-    return
-  end function gas_t_eq
-  
   !*****************************************************************************************************************
 
   function Bonnor_Ebert_Mass(k)

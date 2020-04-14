@@ -38,6 +38,9 @@ module PrDi
   integer(kind=4)                      :: nbproc_used                      ! Number of processus used for the computation
                                                                            ! Can be smaller (-1) than nbproc
                                                                            ! case of luminous process computation (2N +1 computation sheme)
+  ! random processes seed
+  integer, allocatable                 :: seed(:)
+  integer                              :: nseed
   integer(kind=4),parameter            :: map_process_unit  = 109          ! map process file
   integer(kind=4)                      :: ierror                           ! Error index (for information about MPI process fail)
   integer(kind=4),parameter            :: prdi_tag          = 2100         ! When messages are transfered from one process to an other
@@ -112,6 +115,14 @@ module PrDi
     ! this initial value can be modified in case of 2N +1 computation scheme
     ! used for parallel computation of luminous and physical properties
     nbproc_used = nbproc
+    
+    ! initialize the random seed of processes
+    call random_seed(size=nseed)
+    allocate(seed(nseed))
+    do i = 1, nseed
+		seed(i) = i 
+    end do
+    call random_seed(put=seed)
 
     ! set to null values
     main_process      = .false.

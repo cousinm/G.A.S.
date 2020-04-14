@@ -34,8 +34,8 @@ module disc
   !
   !   disc_evolve_I                                  : first part (PREDICTOR) of the disc evolution scheme
   !      called by : galaxy_evolve                     compute input, output and evolution rate associated to the gas structuration history
-  !      called by : disc_evolve_I
-  !      contains  : disc_nosfg2sfg_rate             : return the transfer rate between nosfg and sfg
+  !      contains  : disrupt_str_gas_rate              return the instantaneous disruption rate of the structured gas phase
+  !                  gas_str_rate                      return the instantaneous strucuration rate of teh diffuse gas phase
   !
   !   disc_evolve_II                                 : second part (CORRECTOR) of the disc evolution scheme
   !       called by : galaxy_evolve                    apply to the gas structuration table (gsh_tab) evolution rates
@@ -148,7 +148,6 @@ module disc
     real(kind=8)        :: t_dyn               ! dynamical time of the disc (2.2rd/V) in [Gyr]
     real(kind=8)        :: t_cool              ! cooling clock of the unstructured gas
     real(kind=8)        :: cooling_timescale   ! cooling timescale of the diffuse gas
-    real(kind=8)        :: t_sf                ! star formation timescale
     real(kind=8)        :: dV                  ! mean velocity dispersion at the disc scale height (in the diffuse gas)
     real(kind=8)        :: Q                   ! Toomre parameter
     real(kind=8)        :: sfr_burst           ! save value of the instantaneous sfr at the last merger event
@@ -162,7 +161,6 @@ module disc
     type(gas_type)      :: sfr                 ! star formation rate
     type(gas_type)      :: str_rate            ! gas structuration rate, transfer from the diffuse to the fragmented non star forming gas phases
     type(gas_type)      :: disrupt_rate        ! gas disruption rate, transfer from the fragmented non star formaing and star-forming gas to the diffuse gas
-    type(gas_type)      :: nosfg_2_sfg         ! conversion from the fragmented non star forming to the star forming gas phases
     type(gas_type)      :: ejecta_rate         ! ejecta rate of the disc (large scale wind generated from SN + AGN)
   end type disc_type
 
@@ -171,7 +169,7 @@ module disc
   ! hdu reference for disc structure
   integer(kind=4)           :: hdu_disc
   ! printable properties for disc structure
-  integer(kind=4),parameter :: nb_disc_field = 39 ! Number of disc properties saved
+  integer(kind=4),parameter :: nb_disc_field = 38 ! Number of disc properties saved
   ! Name of each output colomn data
   character(len=ttype_len),dimension(nb_disc_field) :: ttype_disc = (/'t_since_last_merger   ','disc_unstr_gas        ','disc_unstr_mZ         ',&
                                                                       'disc_unstr_mH         ','disc_unstr_mC         ','disc_unstr_mN         ',&
@@ -184,8 +182,8 @@ module disc
                                                                       'disc_cool_timescale   ','disc_t_dyn            ','disc_t_cool           ',&
                                                                       'disc_t_cascade        ','disc_t_form           ','disc_t_eq             ',&
                                                                       'disc_t_emp            ','disc_gas_acc_rate     ','disc_stripping_rate   ',&
-                                                                      'disc_str_rate         ','disc_disrupt_rate     ','disc_nosfg_2_sfg      ',&
-                                                                      'disc_ejecta_rate      ','disc_sfr              ','disc_sfr_burst        '/)
+                                                                      'disc_str_rate         ','disc_disrupt_rate     ','disc_ejecta_rate      ',&
+                                                                      'disc_sfr              ','disc_sfr_burst        '/)
   ! Physical unit of each column data
   character(len=tunit_len),dimension(nb_disc_field) :: tunit_disc = (/'Gyr         ','M_sun       ','M_sun       ','M_sun       ','Msun        ','M_sun       ',&
                                                                       'M_sun       ','M_sun       ','w_o_unit    ','M_sun       ','Msun        ','M_sun       ',&
@@ -193,11 +191,11 @@ module disc
                                                                       'w_o_unit    ','kpc         ','kpc         ','km/s        ','km/s        ','wounit      ',&
                                                                       'Gyr         ','Gyr         ','Gyr         ','Gyr         ','Gyr         ','Gyr         ',&
                                                                       'Gyr         ','M_sun/yr    ','M_sun/yr    ','M_sun/yr    ','M_sun/yr    ','M_sun/yr    ',&
-                                                                      'M_sun/yr    ','M_sun/yr    ','M_sun/yr    '/)
+                                                                      'M_sun/yr    ','M_sun/yr    '/)
   ! Data type of each column data
   character(len=tform_len),dimension(nb_disc_field) :: tform_disc = (/'1E','1E','1E','1E','1E','1E','1E','1E','1E','1E','1E','1E',&
                                                                       '1E','1E','1E','1E','1E','1E','1J','1E','1E','1E','1E','1E','1E',&
-                                                                      '1E','1E','1E','1E','1E','1E','1E','1E','1E','1E','1E','1E','1E','1E'/)
+                                                                      '1E','1E','1E','1E','1E','1E','1E','1E','1E','1E','1E','1E','1E'/)
   ! *** STARS ***
   ! Name of each output colomn data
   character(len=ttype_len),dimension(nb_stars_field) :: ttype_starsd = (/'disc_stars_mass       ','disc_stars_f_young    ', &
@@ -341,16 +339,15 @@ contains
     disc%morpho = 'clumpy'                                ! initially, disc are clumpy
     !
     ! main components
-    disc%nlevels           = 1
-    disc%ngc               = 0
     !
-    call gas_void_gsh(disc%gsh_tab,nlevels=disc%nlevels)  ! void the gas structuration history table
+    call gas_void_gsh(disc%gsh_tab)                       ! void the gas structuration history table
     call stars_void(disc%stars)                           ! void the stellar population hosted by the disc
     call dust_void(disc%dust(1),init_geom='BC    ')       ! void the dust component associated to the young stellar population: BC
     call dust_void(disc%dust(2),init_geom='slab  ')       ! void the dust component associated to the old stelalr population: ISM
     call agn_void(disc%agn)                               ! void the agn component
     !
     ! disc properties
+    disc%ngc               = 0
     disc%f_str             = -1.d0                        ! all other fields are set to null value
     disc%rd                = -1.d0
     disc%h                 = -1.d0
@@ -363,7 +360,6 @@ contains
     disc%t_dyn             = -1.d0
     disc%t_cool            =  0.d0
     disc%cooling_timescale =  0.d0
-    disc%t_sf              = -1.d0
     disc%Qturb_unstr       =  0.d0
     !
     ! interaction with the main halo hot gas (stripping)
@@ -374,7 +370,6 @@ contains
     call gas_void(disc%sfr)
     call gas_void(disc%str_rate)
     call gas_void(disc%disrupt_rate)
-    call gas_void(disc%nosfg_2_sfg)
     call gas_void(disc%ejecta_rate)
 
     return
@@ -400,7 +395,6 @@ contains
     disc1%morpho = disc2%morpho
     !
     ! main components
-    if (disc1%nlevels .eq. 0) call gas_void_gsh(disc1%gsh_tab,nlevels=disc2%nlevels)
     disc1%gsh_tab = disc2%gsh_tab               ! copy the gas structuration history tab
     disc1%stars = disc2%stars                   ! copy the stellar population
     call dust_copy(disc1%dust(1),disc2%dust(1)) ! copy the dust component
@@ -422,7 +416,6 @@ contains
     disc1%t_dyn              = disc2%t_dyn
     disc1%t_cool             = disc2%t_cool
     disc1%cooling_timescale  = disc2%cooling_timescale
-    disc1%t_sf               = disc2%t_sf
     disc1%sfr_burst          = disc2%sfr_burst
     disc1%Qturb_unstr        = disc2%Qturb_unstr
     !
@@ -434,7 +427,6 @@ contains
     disc1%sfr                = disc2%sfr
     disc1%str_rate           = disc2%str_rate
     disc1%disrupt_rate       = disc2%disrupt_rate
-    disc1%nosfg_2_sfg        = disc2%nosfg_2_sfg
     disc1%ejecta_rate        = disc2%ejecta_rate
 
     return
@@ -452,35 +444,25 @@ contains
 
     implicit none
 
-    integer(kind=4)                :: n                         ! loop index
-
     character(MAXPATHSIZE)         :: message                   ! a message to display
 
     real(kind=8),intent(in)        :: Vesc                      ! galaxy escape velocity
     real(kind=8),intent(out)       :: dt_optim                  ! optimal time-step for the disc evolution scheme
-    real(kind=8)                   :: dt_k                      ! optimal timestal for the fragmented non-star forming gas phase
-    real(kind=8)                   :: dt_nosfg, dt_sfg          ! optimal timestep for the diffuse non-star forming and the fragmented star-forming gas phases
-    real(kind=8)                   :: dt_tmp                    ! a local copy
     real(kind=8)                   :: dt_agn                    ! optimal timestep for the agn component
     real(kind=8)                   :: dt_gas, dt_stars          ! optimal time-step for gas and stellar component
-    real(kind=8)                   :: sfr                       ! instantaneous star formation rate
     real(kind=8)                   :: ej                        ! instantaneous ejecta rate
     real(kind=8)                   :: Qturb                     ! SN and AGN turbulent power injected into the fragmented gas phase
     real(kind=8)                   :: Qturb_unstr               ! residual Qturb injected in the unstructured/diffuse gas
     real(kind=8)                   :: f_unstr                   ! unstructured/diffuse mass fraction
-    real(kind=8)                   :: f_sfg                     ! star forming gas mass fraction
     real(kind=8)                   :: f_str_in                  ! structured/fragmented mass fraction of the fresh accreted gas
-    real(kind=8)                   :: f_str                     ! structured/fragmented mass fraction
-    real(kind=8)                   :: f_str_                    ! fraction of non-star forming gas into the fragmented/structured gas phase (= f_str/(1-f_unstr))
-    real(kind=8)                   :: f_sfg_                    ! fraction of star forming gas into the fragmented/structured gas phase (also 1 - f_str_)
 
     type(gas_type),intent(in)      :: fresh_gas_acc_rate        ! the overall accretion rate (= free-fall + cooling)
     type(gas_type),intent(in)      :: gal_stripping_rate        ! the stripping rate acting on the diffuse gas phase
     type(gas_type)                 :: rate                      ! gas transfer rate
     type(gas_type)                 :: tmp_rate                  ! a tmp rate
+    type(gas_type)                 :: sfr                       ! instantaneous star formation rate
     type(gas_type)                 :: ejecta_rate               ! global ejecta rate (gas object form)
     type(gas_type)                 :: stripping_rate            ! the instantaneous stripping rate (gas object form)
-    type(gas_type)                 :: nosfg_2_sfg               ! conversion rate from the non star-forming to the star-forming gas phases
     type(gas_type)                 :: str_rate                  ! structuring/fragmenting rate (from the diffuse to the fragmented non star-forming phases)
     type(gas_type)                 :: disrupt_rate              ! disrupting rate (from the fragmented to the diffuse gas phases)
 
@@ -496,11 +478,11 @@ contains
 
     call gas_void(rate)           ! init
     call gas_void(ejecta_rate)    ! init
-    call gas_void(nosfg_2_sfg)    ! init
     call gas_void(str_rate)       ! init
     call gas_void(disrupt_rate)   ! init
     call gas_void(stripping_rate) ! init
     call gas_void(tmp_rate)       ! init
+    call gas_void(sfr)            ! init
     !
     ! AGE FORM
     if ((disc%life_time .eq. 0.d0) .and. (gas_mass(fresh_gas_acc_rate) .gt. 0.d0)) then
@@ -518,14 +500,12 @@ contains
     ! EVOLUTION RATES
     !************************
     !
-    ! set fresh gas accretion rate
-    disc%fresh_gas_acc_rate = fresh_gas_acc_rate
     ! set the fraction of fragmented/structured gas in the fresh newly accreted gas
     f_str_in = fresh_gas_acc_rate%f_str
     !
     ! compute:
     ! - the star formation rate
-    sfr = disc_SFR(disc)
+    sfr = disc_SFR(disc)*disc_gas_signature(disc,component='structured',apply_as='rate_builder',called_by='sfr')
     ! - the ejecta rate produced by SN and AGN: ej
     ! the overall ejecta rate is stored in ej, the gas_object (ejecta_rate)
     ! will be progressively built as functions of the gas reservoirs
@@ -538,7 +518,7 @@ contains
     !
     ! RUN THROUGH GAS PHASES
     !
-    ! OUTPUTS OF THE DIFFUSE NON-STAR-FORMING GAS
+    ! OUTPUTS OF THE DIFFUSE GAS
     !
     call gas_void(rate) ! init, set to 0.
     !
@@ -546,7 +526,7 @@ contains
     ! the structuration rate is scaled according to the effective cooling time of the diffuse gas
     str_rate = gas_str_rate(disc,cooling_timescale=disc%cooling_timescale)* &
                     disc_gas_signature(disc,component='unstructured',apply_as='rate_builder',called_by='str_rate')
-    rate     = str_rate ! rate is initialize to str_rate
+    rate = str_rate ! rate is initialize to str_rate
     !
     ! The diffuse gas can be ejected from the disc due to SN+AGN kinetic energy injection
     f_unstr = disc_gas_fraction(disc,component='unstructured') ! fraction of diffuse gas
@@ -561,106 +541,56 @@ contains
     rate = rate + stripping_rate ! rate is updated
     !
     ! set the output rate of the diffuse gas phase
-    disc%gsh_tab%out_rate(disc%nlevels+1) = rate
+    disc%gsh_tab%out_rate(1) = rate
     !
-    ! INPUTS OF THE STRUCTURED/FRAGMENTED NON-STAR FORMING GAS
+    ! INPUTS OF THE STRUCTURED/FRAGMENTED GAS
     !
     ! The input gas is composed of :
-    ! 1/ A fraction "f_str_in" of the fresh newly accreted gas, considered as already fragmented/structured
+    ! 1/ The gas transferred (condensed) from the diffuse to the structured/fragmented gas phases
+    ! 2/ A fraction "f_str_in" of the fresh newly accreted gas, considered as already fragmented/structured
     str_rate = str_rate + f_str_in*fresh_gas_acc_rate
-    ! 2/ The gas transferred (condensed) from the diffuse to the structured/fragmented gas phases
     ! 3/ The gas ejected by stellar winds and SN explosions is also strictly added to the structured/fragmented gas
     ! the stellar loss rate is pre-computed during stellar evolution in disc_evolve_II
     ! we use here the value computed and saved in star_evolve_II
     ! Metals contained into the stellar winds and produced by SN explosions are immediatly impacted by the disruption process
     ! and a fraction is therefore transferred to the diffuse gas phase
     ! set the input rate of the structured/fragmented gas phase
-    disc%gsh_tab%in_rate(disc%nlevels) = str_rate + disc%stars%loss_rate
+    disc%gsh_tab%in_rate(2) = str_rate + disc%stars%loss_rate
     !
-    ! OUPUT OF THE STRUCTURED/FRAGMENTED NON-STAR FORMING GAS
+    ! OUPUT OF THE STRUCTURED/FRAGMENTED GAS
     !
     call gas_void(rate) ! init, set to 0.
     !
-    ! The structured/fragmented gas is progressively converted in star forming gas
-    nosfg_2_sfg = nosfg2sfg_rate(disc)*disc_gas_signature(disc,component='structured',apply_as='rate_builder',called_by='nosfg_2_sfg')
-    rate        = nosfg_2_sfg  ! rate is initialized
+    ! The structured/fragmented gas is progressively converted into stars 
+    rate = sfr
     !
     ! The structured/fragmented gas can be disrupted by SN+AGN kinetic energy injection
     if (f_unstr .lt. 1.d0) then
         !
-        ! The enery injected into the structured/fragmented gas is distributed according to the mass
-        ! stored in the structured/fragmented NON star-forming and star-forming gas
-        ! f_str_ is the fraction of structured/fragmented NON star-forming gas
+        ! A fraction of the enery injected into the structured/fragmented gas allows to disrupt it
         ! The residual turbulent energy (non used to disrupt the dense gas) is saved in Qturb_unstr
-        f_str_ = disc_gas_fraction(disc,component='structured')/(1.d0 - f_unstr)
-        disrupt_rate = f_str_*disrupt_str_gas_rate(disc,Qturb,Qturb_unstr=Qturb_unstr)* &
-                    disc_gas_signature(disc,component='structured',apply_as='rate_builder',called_by='disrupt_rate/str')
+        disrupt_rate = (1.d0-f_unstr)*disrupt_str_gas_rate(disc,Qturb,Qturb_unstr=Qturb_unstr)* &
+                    disc_gas_signature(disc,component='structured',apply_as='rate_builder',called_by='disrupt_rate')
         rate = rate + disrupt_rate
     end if
     !
     ! The structured/fragmented gas can be ejected from the disc due to SN+AGN kinetic energy injection
-    f_str = disc_gas_fraction(disc,component='structured')
     ! update ejecta_rate
-    ! the 'star-forming' contribution of ejecta is stored in tmp_rate
-    call gas_void(tmp_rate) ! init
-    tmp_rate = f_str*ej*gas_ejecta_signature(disc_gas_signature(disc,component='structured',apply_as='rate_builder',called_by='ejecta_rate/str'))
+    call gas_void(tmp_rate)
+    tmp_rate = (1.d0-f_unstr)*ej*gas_ejecta_signature(disc_gas_signature(disc,component='structured',apply_as='rate_builder',called_by='ejecta_rate/str'))
     ! tmp_rate is used to update
     ejecta_rate = ejecta_rate + tmp_rate
     ! and update
     rate = rate + tmp_rate
-    ! set the output rate of the structured/fragmented non star-forming gas phase
-    disc%gsh_tab%out_rate(disc%nlevels) = rate
-    !
-    ! INPUTS OF THE STAR FORMING GAS
-    !
-    ! star forming gas is produced at the output of the inertial turbulent cascade
-    ! set the input rate of the star forming gas phase
-    disc%gsh_tab%in_rate(0) = nosfg_2_sfg
-    !
-    ! OUTPUTS OF THE STAR FORMING GAS PHASE
-    !
-    call gas_void(rate) ! init, set to 0.
-    !
-    ! star forming gas is converted in stars
-    if (sfr .gt. 0.d0) rate = sfr*disc_gas_signature(disc,component='sf',apply_as='rate_builder',called_by='sfr') ! init
-    !
-    ! star forming gas can be disrupt by SN+AGN kinetic energy injection
-    if (f_unstr .lt. 1.d0) then
-        !
-        ! The enery injected into the structured/fragmented gas is distributed according to the mass
-        ! stored in the structured/fragmented NON star-forming and star-forming gas
-        ! f_sfg_ is the fraction of structured/fragmented star-forming gas
-        f_sfg_ = disc_gas_fraction(disc,component='sf')/(1.d0 - f_unstr)
-        ! update disrupt_rate by adding from the previous value
-        ! the contribution from the star forming gas phase is stored in tmp_rate
-        call gas_void(tmp_rate) ! init
-        tmp_rate = f_sfg_*disrupt_str_gas_rate(disc,Qturb)* &
-                        disc_gas_signature(disc,component='sf',apply_as='rate_builder',called_by='disrupt_rate/sf')
-        ! tmp_rate is used to update disrupt_rate
-        disrupt_rate = disrupt_rate + tmp_rate
-        ! and update rate
-        rate = rate + tmp_rate
-    end if
-    !
-    ! star forming gas can also be ejected from the disc due to SN+AGN kinetic energy injection
-    f_sfg = disc_gas_fraction(disc,component='sf')
-    ! update ejecta_rate
-    ! the contribution from the star forming gas phase is stored in tmp_rate
-    call gas_void(tmp_rate) ! init
-    tmp_rate = f_sfg*ej*gas_ejecta_signature(disc_gas_signature(disc,component='sf',apply_as='rate_builder',called_by='ejecta_rate/sf'))
-    ! tmp_rate is used to update ejecta_rate
-    ejecta_rate = ejecta_rate + tmp_rate
-    ! and update rate
-    rate = rate + tmp_rate
-    ! set the output rate of the star forming gas phase
-    disc%gsh_tab%out_rate(0) = rate
+    ! set the output rate of the structured/fragmented gas phase
+    disc%gsh_tab%out_rate(2) = rate
     !
     ! INPUTS OF THE UNSTRUCTURED/DIFFUSE GAS
     !
     ! the diffuse gas is composed by:
     ! 1/ the diffuse fresh gas accreted by the disc
     ! 2/ the dense/fragmented gas disrupted by SN+AGN
-    disc%gsh_tab%in_rate(disc%nlevels+1) = (1.d0 - f_str_in)*fresh_gas_acc_rate + disrupt_rate
+    disc%gsh_tab%in_rate(1) = (1.d0 - f_str_in)*fresh_gas_acc_rate + disrupt_rate
     !
     !************************************
     ! TIME-STEP ASSOCIATED TO COMPONENTS
@@ -670,22 +600,17 @@ contains
     ! compute optimal time-step for gas components,
     ! the lower one is the selected for the evolution
     dt_gas = 1.d15  ! init
-    dt_k   = dt_gas; dt_sfg = dt_gas; dt_nosfg = dt_gas; dt_tmp = dt_gas
-    ! run throught levels
-    do n = 0, disc%nlevels +1
-        !
-        write(message,'(a,i1.1)') 'disc_evolve_I / level = ', n
-        dt_tmp = gas_dt_optim(disc%gsh_tab%gas(n),disc%gsh_tab%in_rate(n),disc%gsh_tab%out_rate(n),called_by=trim(message))
-        dt_gas = min(dt_gas, dt_tmp)
-        if (n .eq. 0)                                  dt_sfg   = min(dt_sfg, dt_tmp)
-        if (n .eq. disc%nlevels +1)                    dt_nosfg = min(dt_nosfg, dt_tmp)
-        if ((n .gt. 0) .and. (n .lt. disc%nlevels +1)) dt_k     = min(dt_k, dt_tmp)
-    end do
+    ! diffuse gas
+    write(message,'(a)') 'disc_evolve_I / diffuse gas'
+    dt_gas = min(dt_gas,gas_dt_optim(disc%gsh_tab%gas(1),disc%gsh_tab%in_rate(1),disc%gsh_tab%out_rate(1),called_by=trim(message)))
+    ! structured/fragmented
+    write(message,'(a)') 'disc_evolve_I / fragmented gas'
+    dt_gas = min(dt_gas,gas_dt_optim(disc%gsh_tab%gas(2),disc%gsh_tab%in_rate(2),disc%gsh_tab%out_rate(2),called_by=trim(message)))
     !
     ! *** stars ***
     ! compute optimal time-step for the stellar component,
     dt_stars = -1.d0 ! init
-    dt_stars = stars_dt_optim(disc%stars,sfr*disc_gas_signature(disc,component='sf',apply_as='rate_builder'))
+    dt_stars = stars_dt_optim(disc%stars,sfr)
     !
     ! *** agn ***
     ! compute optimal time-step for the AGN component,
@@ -724,6 +649,8 @@ contains
     ! SET DISC PROPERTIES (rates, Qturb)
     ! *****************************
     !
+    ! fresh gas accretion rate
+    disc%fresh_gas_acc_rate = fresh_gas_acc_rate
     ! interaction with environment
     disc%stripping_rate = stripping_rate
     ! set Qturb_unstr
@@ -731,16 +658,14 @@ contains
     ! the transfer rates are updated here
     ! mass reservoirs will be updated in disc_evolve_II
     ! set new value of the star formation rate
-    disc%sfr = sfr*disc_gas_signature(disc,component='sf',apply_as='rate_builder')
+    disc%sfr = sfr
     if (disc%t_since_last_merger .eq. 0.d0) then
         !
         ! it is the first step after a merger event
         ! save the sfr at the merger time
-        disc%sfr_burst = sfr
+        disc%sfr_burst = gas_mass(sfr)
     end if
     !
-    ! set new value of the transfer rate between dense/fragmented NON star-forming to star-forming
-    disc%nosfg_2_sfg  = nosfg_2_sfg
     ! set new value of the structuration rate
     disc%str_rate     = str_rate
     ! set new value of the disruption rate
@@ -770,8 +695,8 @@ contains
         implicit none
 
         real(kind=8)                      :: gas_str_rate      ! the structuration rate of the diffuse gas
-        real(kind=8)                      :: M_unstr, M_str    ! the unstructured and the structured gas mass
-        real(kind=8)                      :: f_str, f_Q        ! some efficiency coefficients
+        real(kind=8)                      :: M_unstr           ! the diffuse gas mass
+        real(kind=8)                      :: f_unstr, f_Q      ! some efficiency coefficients
         real(kind=8)                      :: rho_unstr         ! unstructured/diffuse gas density
         real(kind=8)                      :: Z_unstr           ! the unstructured/diffuse gas metallicity
         real(kind=8)                      :: t_cool_ts
@@ -786,13 +711,9 @@ contains
         if (disc%t_cool .le. 0.d0) return    ! cooling effective time is null
 
         M_unstr = disc_mass(disc,component='unstructured')
-        M_str   = disc_mass(disc,component='str') + disc_mass(disc,component='sfg')
         !
-        ! apply a efficiency parameter
-        !
-        ! prop to
-        ! fraction of structured gas
-        f_str = M_str / (M_str + M_unstr) ! disc_gas_fraction(disc,component='structured')
+        ! fraction of unstructured/diffuse gas
+        f_unstr = disc_gas_fraction(disc,component='unstructured')
         !
         ! Take into account unstability factor
         f_Q = 1.d0 ! init
@@ -802,7 +723,6 @@ contains
         ! compute the gas metallicity of the unstructured gas phase
         Z_unstr = gas_metallicity(disc_gas_signature(disc,component='unstructured'))
         ! compute the density of the unstructured/diffuse gas phase
-        ! The average density of unstructured gas is computed according to the half mass radius
         rho_unstr = M_unstr / (pi*(1.1d1*disc%rd)**2.) / disc%h  ! [code unit]
         ! cooling timescale
         t_cool_ts = t_cool(diffuse_gas_temp,rho_unstr,Z_unstr)   ! [Gyr]
@@ -815,7 +735,7 @@ contains
             x = disc%t_cool/t_cool_ts
             if (x .gt. 0.d0) then
                 !
-                gas_str_rate = (1.d0-f_str)*f_Q*M_unstr*MFF(x)/t_cool_ts
+                gas_str_rate = f_unstr*f_Q*M_unstr*MFF(x)/t_cool_ts
             end if
         end if
         !
@@ -838,74 +758,31 @@ contains
         real(kind=8),intent(in)            :: Qturb                ! turbulent power, injected by SN and AGN
         real(kind=8),intent(out),optional  :: Qturb_unstr          ! the residual turbulent power, then injected in the diffuse gas
         real(kind=8)                       :: disrupt_str_gas_rate ! the disruption rate of the structured/frgamented gas
-        real(kind=8)                       :: f_unstr              ! the structured/frgamented mass fraction
+        real(kind=8)                       :: f_str                ! the structured/frgamented mass fraction
 
         type(disc_type),intent(in)         :: disc                 ! the disc component
 
         disrupt_str_gas_rate = 0.d0  ! init
         if (present(Qturb_unstr)) Qturb_unstr = 0.d0  ! init
 
-        f_unstr = disc_gas_fraction(disc,component='unstructured')
+        f_str = disc_gas_fraction(disc,component='structured')
 
         if (Qturb .gt. 0.d0) then
             !
             ! Some turbulent energy is injected into the dense/fragmented gas
-            disrupt_str_gas_rate = min(1.d5,2.d0*(1.d0-f_unstr)*Qturb/disc%dV**2.)
+            disrupt_str_gas_rate = min(1.d5,2.d0*f_str*Qturb/disc%dV**2.)
             !
             if (present(Qturb_unstr)) then
                 !
                 ! In input Qturb is the full turbulent power
                 ! If asked, in output Qturb_unstr saves the turbulent power
                 ! that will be injected into the diffuse/unstructured gas phase
-                Qturb_unstr = f_unstr*Qturb
+                Qturb_unstr = (1.d0-f_str)*Qturb
             end if
         end if
 
         return
     end function disrupt_str_gas_rate
-
-    ! *************************************************
-
-    function nosfg2sfg_rate(disc)
-
-        ! COMPUTE TRANSFER RATE BETWEEN THE STRUCTURED GAS RESERVOIR TO THE STAR FORMING GAS RESERVOIR
-
-        implicit none
-
-        real(kind=8)               :: nosfg2sfg_rate  ! the transfer rate
-        real(kind=8)               :: M_str           ! Mass of structured gas
-        real(kind=8)               :: dt
-        real(kind=8)               :: a, b 
-
-        type(disc_type),intent(in) :: disc            ! the disc component
-
-        nosfg2sfg_rate = 0.d0 ! init
-        M_str = disc_mass(disc, component='str')
-
-		if (disc%h > 0.d0) then
-			!
-			! To be active the cascade mass should at leat be greater the the saturation 
-			! mass of the largest scale
-			if (M_str .gt. Saturation_Mass(1.d0/disc%h, disc%str_rate)) then
-				!
-				! The fragmented NON star-forming gas is converted in fragmented star-forming gas
-				if (disc%gsh_tab%t_cascade .gt. disc%gsh_tab%t_eq) then
-					! The cascade reaches its equilibrium
-					dt = disc%gsh_tab%t_prod
-				else
-					a = (disc%gsh_tab%t_prod - disc%gsh_tab%t_emp) / (disc%gsh_tab%t_eq - disc%gsh_tab%t_form)
-					b = disc%gsh_tab%t_emp - a * disc%gsh_tab%t_form
-					dt = a * disc%gsh_tab%t_cascade + b
-				end if
-
-				if (dt .gt. 0.d0) then
-					nosfg2sfg_rate = min(M_str, Bonnor_Ebert_Mass(1.d0/disc%h)) / dt
-				end if
-			end if
-		end if
-
-        return
-    end function nosfg2sfg_rate
 
     ! *************************************************
     ! end contains disc_evolve_I
@@ -919,7 +796,7 @@ contains
     ! COMPUTE SECOND PART OF DISC EVOLUTION (CORRECTOR) :
     ! this subroutine evolve gas and stars component (mass) by using the optimal time-step (dt) and transfer rates computed previously in disc_evolve_I
     ! Concerning the gas structuration history, all informations about its evolution is stored in the gsh_tab
-    ! For the gas, disc_evolve_II has to evolve the sfg and the no_sfg gas reservoir
+    ! For the gas, disc_evolve_II has to evolve the diffuse and the fragmented gas component
     ! For the stars, disc_evolve_II has to evolve stars component
 
     implicit none
@@ -1017,8 +894,8 @@ contains
         end if
     end if
     !
-    ! Add gas_return to the no_sfg component
-    call gas_add(disc%gsh_tab%gas(disc%nlevels+1),gas_return)
+    ! Add gas_return to the fragmented component
+    call gas_add(disc%gsh_tab%gas(2),gas_return)
     !
     ! *****************************
     ! SET disc PROPERTIES
@@ -1052,10 +929,8 @@ contains
       disc%kappa     = disc_kappa(1.68d0*disc%rd,dm,disc,bulge)
       ! computed dynamical time
       disc%t_dyn     = disc_dynamical_time(disc,dm,bulge)
-      ! update disc star formation timescale
-      disc%t_sf      = disc_star_formation_timescale()
       ! compute velocity dispersion
-      disc%dV        = disc_velocity_dispersion(disc,dm=dm,accreted_mass=dMacc,dt=dt)
+      disc%dV        = disc_update_velocity_dispersion(disc,dm=dm,accreted_mass=dMacc,dt=dt)
       ! compute the scale height of the disc
       disc%h         = disc_scale_height(disc)
       ! compute Toomre parameter
@@ -1082,14 +957,12 @@ contains
       ! dust_evolve(d,gas,rc,incl=incl)
       ! BC
       ! Fragmented gas and dusts are assumed to be distributed homogeneously into the different GMCs
-      ! BC contains structured and star-forming gas
       ! build the complete gas object
-      gas = disc_mass(disc,component='str')*disc_gas_signature(disc,component='str') + &
-                disc_mass(disc,component='sfg')*disc_gas_signature(disc,component='sfg')
+      gas = disc_mass(disc,component='str')*disc_gas_signature(disc,component='str')
       ! Scale the gas component to a BC mass
       if (disc%ngc .gt. 0) then
         !
-        gas = 1.d0/real(disc%ngc, kind=8)*gas
+        gas = min(gas_mass(gas),Bonnor_Ebert_Mass(1.d0/disc%h))*gas_signature(gas)
         if (gas_mass(gas) > 0.d0) then
             !
             ! We compute here the effective extinction associated to 1 GMC
@@ -1187,7 +1060,7 @@ contains
       Qrad          = 0.d0
     end if
 
-    tot_gas = disc_mass(disc,component='all_gas')
+    tot_gas = disc_mass(disc,component='all')
 
     if (tot_gas .lt. M_gas_min) return ! no ism
 
@@ -1298,7 +1171,7 @@ contains
 
         SN_ejecta_rate = 0.d0 ! init
 
-        tot_gas = disc_mass(disc,component='all_gas')
+        tot_gas = disc_mass(disc,component='all')
 
         if (disc_ejecta_efficiency .le. 0.d0) return  ! no ejecta takes into account
         !
@@ -1517,10 +1390,9 @@ contains
 
   !*****************************************************************************************************************
 
-  subroutine disc_update_gas_struct_history(disc,dt,disc1,disc2,nosfg_from_bulges,nosfg_in_torus)
+  subroutine disc_update_gas_struct_history(disc,dt,disc1,disc2,unstr_from_bulges,unstr_in_torus)
 
     ! UPDATE THE GAS STRUCTURATION HISTORY OF A GIVEN DISC
-    ! computed disc%t_emp, the emptying time scale of the structured gas reservoir
     ! Warning ! This subroutine must be called after the update of :
     !                             - the caracteristic exponential radius of the disc
     !                             - the disc scale height
@@ -1534,8 +1406,8 @@ contains
     real(kind=8),intent(in),optional     :: dt                  ! evolution time-step
     real(kind=8)                         :: M_comp              ! Mass of the component
 
-    type(gas_type),intent(in),optional   :: nosfg_from_bulges   ! nosfg coming from bulges (1 & 2)
-    type(gas_type),intent(in),optional   :: nosfg_in_torus      ! nosfg added to the AGN torus
+    type(gas_type),intent(in),optional   :: unstr_from_bulges   ! nosfg coming from bulges (1 & 2)
+    type(gas_type),intent(in),optional   :: unstr_in_torus      ! nosfg added to the AGN torus
 
     type(disc_type),intent(inout)        :: disc                ! The remnant disc (result of the merger)
     type(disc_type),intent(in),optional  :: disc1               ! The first progenitor disc component
@@ -1555,7 +1427,7 @@ contains
     ! - A simple restructuration of a given disc
     ! - A merger of two differents gsh_tab, coming from two disc progenitors
     !
-    if (present(disc1) .and. present(disc2) .and. present(nosfg_from_bulges) .and. present(nosfg_in_torus)) then
+    if (present(disc1) .and. present(disc2) .and. present(unstr_from_bulges) .and. present(unstr_in_torus)) then
       !
       ! MERGER OF TWO DISC COMPONENTS
       !
@@ -1566,11 +1438,11 @@ contains
       ! merge progenitors disc structuration histories
       disc%gsh_tab%gas = disc1%gsh_tab%gas + disc2%gsh_tab%gas
       !
-      ! add no-sfg coming from bulge
-      call gas_add(disc%gsh_tab%gas(disc%nlevels+1), nosfg_from_bulges)
+      ! add diffuse/unstructured gas coming from bulge
+      call gas_add(disc%gsh_tab%gas(1), unstr_from_bulges)
       !
       ! substract the nosfg added to the agn torus
-      call gas_sub(disc%gsh_tab%gas(disc%nlevels+1), nosfg_in_torus)
+      call gas_sub(disc%gsh_tab%gas(1), unstr_in_torus)
       !
     else
       !
@@ -1579,7 +1451,7 @@ contains
           ! RESTRUCTURATION OF A GIVEN DISC
           !
           ! update gas structuration
-          do n = 0, disc%nlevels +1
+          do n = 1, 2
               !
               ! apply input rate
               !
@@ -1600,13 +1472,13 @@ contains
                                param_name=(/'dt                       ','M_gas_min                ','M_gas_crit               ','out_rate*dt              ','gas                      '/), &
                                real_param_val=(/dt,M_gas_min,M_gas_crit,gas_mass(disc%gsh_tab%out_rate(n)*dt),gas_mass(disc%gsh_tab%gas(n))/))
                    call IO_print_message('use: ',only_rank=rank, &
-                               param_name=(/'n                        ','disc%nlevels             '/), int_param_val=(/n,disc%nlevels/))
+                               param_name=(/'n                        '/), int_param_val=(/n/))
                    stop ! stop the program
                 end if
                 !
               else
                 if (gas_mass(disc%gsh_tab%out_rate(n)*dt) .gt. 0.d0) then
-                  call IO_print_error_message('Try to substract mass from a structuration level without mass',called_by = 'disc_update_gas_struct_history')
+                  call IO_print_error_message('Try to substract mass from an empty component',called_by = 'disc_update_gas_struct_history')
                   stop ! stop the program
                 end if
               end if
@@ -1708,14 +1580,16 @@ contains
           !
           disc%gsh_tab%t_eq = (M1*disc1%gsh_tab%t_eq + M2*disc2%gsh_tab%t_eq)/(M1+M2)
           !
-          disc%gsh_tab%t_prod = (M1*disc1%gsh_tab%t_prod + M2*disc2%gsh_tab%t_prod)/(M1+M2)
-          !
           disc%gsh_tab%t_emp = (M1*disc1%gsh_tab%t_emp + M2*disc2%gsh_tab%t_emp)/(M1+M2)
+          !
+          disc%gsh_tab%t_prod = (M1*disc1%gsh_tab%t_prod + M2*disc2%gsh_tab%t_prod)/(M1+M2)
+          disc%gsh_tab%t_prod = min(disc%gsh_tab%t_prod, disc%gsh_tab%t_emp)
           !
           MBE1 = min(M1, Bonnor_Ebert_Mass(1./disc1%h))
           MBE2 = min(M2, Bonnor_Ebert_Mass(1./disc2%h))
+          disc%ngc = 0
           if ((disc%h > 0.d0) .and. ((MBE1 + MBE2) > 0.)) then
-             disc%ngc = int((MBE1*float(disc1%ngc) + MBE2*float(disc2%ngc)) / (MBE1 + MBE2))
+             disc%ngc = max(1,int((MBE1*float(disc1%ngc) + MBE2*float(disc2%ngc)) / (MBE1 + MBE2)))
           end if
         end if
     else
@@ -1732,25 +1606,27 @@ contains
         end if
         !
         ! update the effective formation timescale of the inertial cascade
-        t_form = gas_t_form(disc%str_rate,disc%h)
+        t_form = gas_timescales(disc%str_rate,disc%h,timescale='formation')
         disc%gsh_tab%t_form = (max(0.d0,M1-M2)*disc%gsh_tab%t_form + M2*t_form)/M1
         !
         ! update the effective equilibrimum timescale of the inertial cascade
-        t_eq = gas_t_eq(disc%str_rate,disc%h)
+        t_eq = gas_timescales(disc%str_rate,disc%h,timescale='equilibrium')
         disc%gsh_tab%t_eq = (max(0.d0,M1-M2)*disc%gsh_tab%t_eq + M2*t_eq)/M1
         !
         ! update the effective emptying timescale of the inertial cascade
-        t_emp = gas_t_str(disc%str_rate,disc%h)
+        t_emp = gas_timescales(disc%str_rate,disc%h,timescale='structuration')
         disc%gsh_tab%t_emp = (max(0.d0,M1-M2)*disc%gsh_tab%t_emp + M2*t_emp)/M1
         !
         ! update the effective production timescale of the inertial cascade
         t_prod = Bonnor_Ebert_Mass(1./disc%h) / gas_mass(disc%str_rate)
         disc%gsh_tab%t_prod = (max(0.d0,M1-M2)*disc%gsh_tab%t_prod + M2*t_prod)/M1
+        disc%gsh_tab%t_prod = min(disc%gsh_tab%t_prod, disc%gsh_tab%t_emp)
         !
         ! update the number of giant birth clouds
-        if ((disc%h > 0.d0) .and. ((disc%ngc .gt. 0) .or. ((disc%ngc == 0) .and. (disc%gsh_tab%t_cascade .gt. disc%gsh_tab%t_form)))) then
+        !if ((disc%h > 0.d0) .and. ((disc%ngc .gt. 0) .or. ((disc%ngc == 0) .and. (disc%gsh_tab%t_cascade .gt. disc%gsh_tab%t_form/2.d0)))) then
+        if (disc%h > 0.d0) then
           MBE1 = min(M1, Saturation_Mass(1./disc%h, disc%str_rate))
-          disc%ngc = int(ceiling(MBE1/Bonnor_Ebert_Mass(1./disc%h)))
+          disc%ngc = int(max(1,ceiling(MBE1/Bonnor_Ebert_Mass(1./disc%h))))
         end if
     end if
 
@@ -1855,23 +1731,36 @@ contains
   function disc_SFR(disc)
 
     ! COMPUTE STAR FORMATION RATE IN A DISC COMPONENT
-
     implicit none
 
-    real(kind=8)                :: M_sfg       ! mass of star forming gas in the disc
-    real(kind=8)                :: disc_SFR    ! the corresponding star formation rate
+    real(kind=8)               :: disc_SFR  ! the instantaneous star formation rate
+    real(kind=8)               :: M_str     ! Mass of structured gas
+    real(kind=8)               :: dt
+    real(kind=8)               :: a, b 
 
-    type(disc_type),intent(in)  :: disc        ! a disc component
+    type(disc_type),intent(in) :: disc      ! the disc component
 
-    disc_SFR = 0.d0             ! init
+    disc_SFR = 0.d0 ! init
+    M_str = disc_mass(disc, component='str')
 
-    ! mass of star forming gas in the disc
-    M_sfg = disc_mass(disc,component='sfg')
-
-    if (disc%t_sf .gt. 0.d0) then
+    if ((disc%h > 0.d0) .and. (disc%ngc .gt. 0)) then
         !
-        ! definition
-        disc_SFR = M_sfg/disc%t_sf
+        ! The fragmented NON star-forming gas is converted in fragmented star-forming gas
+        if (disc%gsh_tab%t_cascade .gt. disc%gsh_tab%t_eq) then
+           ! The cascade reaches its equilibrium
+           dt = disc%gsh_tab%t_prod
+        else
+           if (disc%gsh_tab%t_prod .lt. disc%gsh_tab%t_emp) then
+              a = (disc%gsh_tab%t_prod - disc%gsh_tab%t_emp) / (disc%gsh_tab%t_eq - disc%gsh_tab%t_form)
+              b = disc%gsh_tab%t_emp - a * disc%gsh_tab%t_form
+              dt = a * disc%gsh_tab%t_cascade + b
+           else
+              dt = disc%gsh_tab%t_prod
+           end if
+        end if
+        if (dt .gt. 0.d0) then
+           disc_SFR = min(M_str, Bonnor_Ebert_Mass(1.d0/disc%h)) / dt
+        end if
     end if
 
     return
@@ -1905,8 +1794,6 @@ contains
 
     implicit none
 
-    integer(kind=4)                  :: n           ! loop index
-
     character(*),intent(in),optional :: component   ! allows to select the disc component (diffuse, fragmented, stars, agn)
     character(*),intent(in),optional :: element     ! allows to select the gas element (H, He, C, ... )
     character(MAXPATHSIZE)           :: message     ! a message to display
@@ -1921,9 +1808,8 @@ contains
 
     ! compute total mass
     ! sum over structuration level
-    do n = 0, disc%nlevels +1
-        disc_mass = disc_mass + gas_mass(disc%gsh_tab%gas(n))
-    end do
+    disc_mass = gas_mass(disc%gsh_tab%gas(1),component=element)             ! diffuse gas
+    disc_mass = disc_mass + gas_mass(disc%gsh_tab%gas(2),component=element) ! structured/fragemented gas
     ! add stellar and agn mass
     disc_mass = disc_mass + stars_mass(disc%stars) + agn_mass(disc%agn)
 
@@ -1934,33 +1820,17 @@ contains
         !
         ! A specific component of the gas is selected
         select case (trim(component))
-        case ('sfg','star-forming')
-            disc_mass = gas_mass(disc%gsh_tab%gas(0),component=element)
-        case ('no_sfg','nosfg','non-star-forming')
-            disc_mass = 0.d0
-            do n = 1, disc%nlevels +1
-                disc_mass = disc_mass + gas_mass(disc%gsh_tab%gas(n),component=element)
-            end do
-        case ('all_gas','gas')
-            disc_mass = 0.d0
-            do n = 0, disc%nlevels +1
-                disc_mass = disc_mass + gas_mass(disc%gsh_tab%gas(n),component=element)
-            end do
+        case ('all','gas')
+            disc_mass = gas_mass(disc%gsh_tab%gas(1),component=element)             ! diffuse gas
+            disc_mass = disc_mass + gas_mass(disc%gsh_tab%gas(2),component=element) ! structured/fragemented gas
         case ('agn','SMBH','black-hole')
             disc_mass = agn_mass(disc%agn,component=component)
         case ('without_SMBH','no_SMBH','no_AGN')
             disc_mass = disc_mass - agn_mass(disc%agn)
         case('structured','str','fragmented')
-            if (disc%nlevels .eq. 1) then
-                !
-                disc_mass = gas_mass(disc%gsh_tab%gas(disc%nlevels),component=element)
-            else
-                !
-                call IO_print_error_message('nlevel = 0, cannot compute structured gas mass',only_rank=rank,called_by='disc_mass')
-                stop  ! stop the program
-            end if
+            disc_mass = gas_mass(disc%gsh_tab%gas(2),component=element)
         case('unstructured','unstr','diffuse')
-            disc_mass = gas_mass(disc%gsh_tab%gas(disc%nlevels+1),component=element)
+            disc_mass = gas_mass(disc%gsh_tab%gas(1),component=element)
         case ('stars')
             disc_mass = stars_mass(disc%stars)
         case default
@@ -1976,9 +1846,8 @@ contains
             ! A specific element of the gas is selected
             disc_mass = 0.d0
             ! sum over structuration level
-            do n = 0, disc%nlevels +1
-                disc_mass = disc_mass + gas_mass(disc%gsh_tab%gas(n),component=element)
-            end do
+            disc_mass = gas_mass(disc%gsh_tab%gas(1),component=element)              ! diffuse gas
+            disc_mass = disc_mass + gas_mass(disc%gsh_tab%gas(2),component=element)  ! structured/fragemented gas
         end if
     end if
 
@@ -2031,8 +1900,6 @@ contains
 
     implicit none
 
-    integer(kind=4)                   :: n                  ! loop index under structuration levels
-
     character(*),intent(in),optional  :: component          ! allow to select the disc component (sfg, non-sfg)
     character(*),intent(in),optional  :: called_by          ! name of the function which has called this function
     character(*),intent(in),optional  :: apply_as           ! the gas signature function can be use in different cases
@@ -2045,30 +1912,18 @@ contains
 
     call gas_void(disc_gas_signature)
 
-    if (disc%nlevels .lt. 0) return ! no gas
-
     ! sum over all gas components
-    do n = 0, disc%nlevels +1
-        disc_gas_signature = disc_gas_signature + disc%gsh_tab%gas(n)
-    end do
+    disc_gas_signature = disc%gsh_tab%gas(1)                      ! diffuse gas
+    disc_gas_signature = disc_gas_signature + disc%gsh_tab%gas(2) ! structured/fragmented gas
 
     if (present(component)) then
         !
         select case (trim(component))
-        case ('sfg','sf')
-            disc_gas_signature = gas_signature(disc%gsh_tab%gas(0),apply_as=apply_as,called_by=called_by)
-        case ('no_sfg','nosfg','no-sfg','unstructured','unstr','diffuse')
-            disc_gas_signature = gas_signature(disc%gsh_tab%gas(disc%nlevels+1),apply_as=apply_as,called_by=called_by)
-        case ('str','structured')
-            if (disc%nlevels .eq. 1) then
-                !
-                disc_gas_signature = gas_signature(disc%gsh_tab%gas(disc%nlevels),apply_as=apply_as,called_by=called_by)
-            else
-                !
-                call IO_print_error_message('nlevel = 0, cannot compute structured gas signature',only_rank=rank,called_by='disc_gas_signature')
-                stop  ! stop the program
-            end if
-        case ('all_gas','gas')
+        case('unstructured','unstr','diffuse')
+            disc_gas_signature = gas_signature(disc%gsh_tab%gas(1),apply_as=apply_as,called_by=called_by)
+        case('structured','str','fragmented')
+            disc_gas_signature = gas_signature(disc%gsh_tab%gas(2),apply_as=apply_as,called_by=called_by)
+        case ('all','gas')
             disc_gas_signature = gas_signature(disc_gas_signature,apply_as=apply_as,called_by=called_by)
         case default
             write(message,'(a,a,a)') 'Keyword ', trim(component), ' not defined'
@@ -2266,29 +2121,14 @@ contains
   end function disc_dynamical_time
 
  !*****************************************************************************************************************
-
- function disc_star_formation_timescale()
-
-     ! RETURN THE STAR FORMATION TIMESCALE ASSOCIATED TO A GIVEN DISC
-
-     implicit none
-
-     real(kind=8)                :: disc_star_formation_timescale
-
-     disc_star_formation_timescale = 2.d-4 ! Gyr
-
-     return
-  end function disc_star_formation_timescale
-
-  !*****************************************************************************************************************
-
+ 
   function disc_gas_fraction(disc,component)
 
      ! RETURN THE MASS FRACTION OF A GIVEN COMPONENT
 
      implicit none
 
-     integer(kind=4)                   :: e,n                ! loop indexes
+     integer(kind=4)                   :: e                  ! loop indexes
 
      character(MAXPATHSIZE)            :: message            ! a message to display
      character(*),intent(in),optional  :: component          ! allow to select the bulge component (sf, str, stars)
@@ -2301,12 +2141,12 @@ contains
 
      disc_gas_fraction = 0.d0 ! init
 
-     M_gas = disc_mass(disc,component='gas')
+     M_gas = disc_mass(disc,component='all')
      if (M_gas .le. 0.d0) return
 
      if (present(component)) then
         !
-        subcomponent = 'all_mass' ! the default values
+        subcomponent = 'all' ! the default values
         if ((trim(component) .eq. 'Metals') .or. (trim(component) .eq. 'metals')) then
           !
           subcomponent = trim(component)
@@ -2321,36 +2161,22 @@ contains
         end if
         !
         select case (trim(component))
-        case ('sfg','sf')
-            disc_gas_fraction = max(0.d0, gas_mass(disc%gsh_tab%gas(0),component=subcomponent))/M_gas
-        case ('no_sfg','nosfg')
-            disc_gas_fraction = 0.d0
-            do n = 1, disc%nlevels +1
-                disc_gas_fraction = disc_gas_fraction + max(0.d0, gas_mass(disc%gsh_tab%gas(n),component=subcomponent))/M_gas
-            end do
-        case ('all_gas','gas')
-            disc_gas_fraction = 0.d0
-            do n = 0, disc%nlevels +1
-                disc_gas_fraction = disc_gas_fraction + max(0.d0, gas_mass(disc%gsh_tab%gas(n),component=subcomponent))/M_gas
-            end do
-         case('structured','str')
-            if (disc%nlevels .eq. 1) then
-                !
-                disc_gas_fraction = max(0.d0, gas_mass(disc%gsh_tab%gas(disc%nlevels),component=subcomponent))/M_gas
-            else
-                !
-                call IO_print_error_message('nlevel = 0, cannot compute structured gas mass',only_rank=rank,called_by='disc_mass')
-                stop  ! stop the program
-            end if
-         case('unstructured','unstr')
-            disc_gas_fraction = max(0.d0, gas_mass(disc%gsh_tab%gas(disc%nlevels+1),component=subcomponent))/M_gas
-         case default
+        
+        case ('all','gas')
+            !
+            disc_gas_fraction = gas_mass(disc%gsh_tab%gas(1),component=subcomponent) ! diffuse gas
+            disc_gas_fraction = disc_gas_fraction + gas_mass(disc%gsh_tab%gas(2),component=subcomponent) ! structured gas
+        case('structured','str','fragmented')
+            !
+            disc_gas_fraction = gas_mass(disc%gsh_tab%gas(2),component=subcomponent)
+        case('unstructured','unstr','diffuse')
+            !
+            disc_gas_fraction = gas_mass(disc%gsh_tab%gas(1),component=subcomponent)
+        case default
             if (trim(subcomponent) .eq. trim(component)) then
                 !
-                disc_gas_fraction = 0.d0
-                do n = 0, disc%nlevels +1
-                    disc_gas_fraction = disc_gas_fraction + max(0.d0, gas_mass(disc%gsh_tab%gas(n),component=subcomponent))/M_gas
-                end do
+                disc_gas_fraction = gas_mass(disc%gsh_tab%gas(1),component=subcomponent) ! diffuse gas
+                disc_gas_fraction = disc_gas_fraction + gas_mass(disc%gsh_tab%gas(2),component=subcomponent) ! structured gas
             else
                 !
                 write(message,'(a,a,a)') 'Keyword ', trim(component), ' not defined'
@@ -2360,6 +2186,7 @@ contains
          end select
      end if
 
+     disc_gas_fraction = disc_gas_fraction / M_gas
      return
   end function disc_gas_fraction
 
@@ -2457,7 +2284,7 @@ contains
 
   !*****************************************************************************************************************
 
-  function disc_velocity_dispersion(disc,disc2,dm,accreted_mass,dt)
+  function disc_update_velocity_dispersion(disc,disc2,dm,accreted_mass,dt)
 
      ! RETURN THE DISC VELOCITY DISPERSION
      ! The velocity dispersion is produced by injection of
@@ -2470,10 +2297,11 @@ contains
      implicit none
 
      real(kind=8),intent(in),optional     :: dt
-     real(kind=8)                         :: disc_velocity_dispersion
+     real(kind=8)                         :: disc_update_velocity_dispersion
      real(kind=8)                         :: M1, M2
      real(kind=8)                         :: Edisp1, Edisp2, Eint, Eturb
-     real(kind=8)                         :: racc, t_dyn_acc, t_disp
+     real(kind=8)                         :: Egrav, Ekin
+     real(kind=8)                         :: racc, t_disp
      real(kind=8)                         :: Vacc
      real(kind=8)                         :: fdisp
 
@@ -2483,7 +2311,7 @@ contains
      type(dm_type),intent(in),optional    :: dm            ! a dark matter component
      type(disc_type),intent(in),optional  :: disc2         ! a disc component (the second progenitor
 
-     disc_velocity_dispersion = disc%dV ! init to the previous value
+     disc_update_velocity_dispersion = disc%dV ! init to the previous value
 
      if (present(dt)) then
         !
@@ -2491,34 +2319,40 @@ contains
         !
         ! accreted gaseous disc
         M1        = gas_mass(accreted_mass)
+        ! Gravitational energy of the accreted gas
+        Egrav = gravconst_code_unit*dm%M_vir * M1 / dm%R_vir
         ! half mass radius of the accreted gaseous disc
         racc      = dm%spin*dm%R_halo/sqrt(2.d0)
         ! orbital velocity of the accreted gaseous disc
-        Vacc      = disc_velocity_(racc,(/dm%rho_core,dm%r_core,1.68d0*racc,M1,0.d0,0.d0,0.d0/))
-        ! dynamical time
-        t_dyn_acc = racc / Vacc
+        Vacc = disc_velocity_(racc,(/dm%rho_core,dm%r_core,1.68d0*racc,M1,0.d0,0.d0,0.d0/))
         ! kinetic energy of the accreted gaseous disc
-        fdisp  = min(1.d0, (1.d0/3.d0)*(dt/t_dyn_acc))
-        Edisp1 = fdisp*5.d-1*gas_mass(accreted_mass)*Vacc**2.
-        ! focus only on unstructured gas
-        M1 = (1.d0 - accreted_mass%f_str)*M1
+        Ekin = 5.d-1*M1*Vacc**2.
+        ! deduce the Turbulent residual energy
+        Eturb = max(0.d0,Egrav-Ekin)
+        fdisp = 0.d0 ! iitially no dissipation
+        if (Eturb .gt. 0.d0) then
+			! we assume that a fraction of the turbulent energy is lost during a dissipation timescale
+			t_disp = 5.d-1*Ekin/Eturb*(racc / Vacc)
+			fdisp  = min(1.d0,dt/t_disp)
+		end if
+        Edisp1 = (1.d0-fdisp)*Eturb
         !
         ! pre-formed disc
-        ! we assume that a fraction of the turbulent energy is lost during a orbital time
         ! this routine is called after the update of disc%gsh_tab, we have to remove the latest accreted mass
-        M2     = max(0.d0,disc_mass(disc,component='unstr') - M1)
-        t_disp = disc%h / disc%dV
-        fdisp  = (1.d0-min(1.d0,(1.d0/3.d0)*(dt/t_disp)*slope_limiter(disc%dV,3.d1*sig_star)))
-        Edisp2 = fdisp*5.d-1*M2*disc%dV**2.
+        ! focus only on unstructured gas
+        M1 = (1.d0 - accreted_mass%f_str)*M1
+        M2 = max(0.d0,disc_mass(disc,component='unstr') - M1)
+        t_disp = disc%t_dyn
+        fdisp  = min(1.d0,dt/t_disp)*slope_limiter(disc%dV,3.d1*sig_star)
+        Edisp2 = (1.d0-fdisp)*5.d-1*M2*disc%dV**2.
         !
-        ! Add a fraction of the gravitatial interaction energy
-        if (disc%rd + racc .gt. 0.d0) then
-            !
-            Eint = gravconst_code_unit*(M1*M2)/(1.68d0*(disc%rd + racc))
-        end if
+        ! No gravitational energy in that case
+        Eint = 0.d0
         !
         ! Add turbulence energy
-        Eturb = disc%Qturb_unstr*dt
+        t_disp = disc%h / disc%dV
+        fdisp  = min(1.d0,dt/t_disp)
+        Eturb = (1.d0-fdisp)*disc%Qturb_unstr*dt
      end if
      !
      if (present(disc2)) then
@@ -2546,9 +2380,9 @@ contains
      end if
 
      if ((M1 + M2) .gt. 0.d0) then
-        disc_velocity_dispersion = max(1.d1*sig_star,sqrt(2.d0*(Edisp1 + Edisp2 + Eint + Eturb)/(M1 + M2)))
+        disc_update_velocity_dispersion = max(3.d1*sig_star,sqrt(2.d0*(Edisp1 + Edisp2 + Eint + Eturb)/(M1 + M2)))
         !
-        if (is_NaN(disc_velocity_dispersion)) then
+        if (is_NaN(disc_update_velocity_dispersion)) then
             !
             call IO_print_error_message('new dV is NAN',only_rank=rank,called_by='disc_velocity_dispersion')
             call IO_print_message('used',only_rank=rank,component='disc', &
@@ -2560,7 +2394,7 @@ contains
      end if
 
      return
-  end function disc_velocity_dispersion
+  end function disc_update_velocity_dispersion
 
   !*****************************************************************************************************************
 
@@ -2846,12 +2680,11 @@ contains
     !'disc_cool_timescale   ','disc_t_dyn            ','disc_t_cool           ',&
     !'disc_t_cascade        ','disc_t_form           ','disc_t_eq             ',&
     !'disc_t_emp            ','disc_gas_acc_rate     ','disc_stripping_rate   ',&
-    !'disc_str_rate         ','disc_disrupt_rate     ','disc_nosfg_2_sfg      ',&
-    !'disc_ejecta_rate      ','disc_sfr              ','disc_sfr_burst        '/)
+    !'disc_str_rate         ','disc_disrupt_rate     ','disc_ejecta_rate      ',&
+    !'disc_sfr              ','disc_sfr_burst        '/)
 
     unstr_gas = mass_code_unit_in_M_Sun*disc_mass(disc,component='unstr')*disc_gas_signature(disc,component='unstr')
-    str_gas   = mass_code_unit_in_M_Sun*(disc_mass(disc,component='str')*disc_gas_signature(disc,component='str') &
-                                          + disc_mass(disc,component='sfg')*disc_gas_signature(disc,component='sfg'))
+    str_gas   = mass_code_unit_in_M_Sun*(disc_mass(disc,component='str')*disc_gas_signature(disc,component='str'))
     OH_unstr = O_H(unstr_gas)
     OH_str   = O_H(str_gas)
     if (OH_unstr .gt. 0.d0) OH_unstr = 12.d0 + log10(OH_unstr)
@@ -2883,7 +2716,6 @@ contains
                   mass_rate_code_unit_2_MsunPerYr*gas_mass(disc%stripping_rate), &
                   mass_rate_code_unit_2_MsunPerYr*gas_mass(disc%str_rate), &
                   mass_rate_code_unit_2_MsunPerYr*gas_mass(disc%disrupt_rate), &
-                  mass_rate_code_unit_2_MsunPerYr*gas_mass(disc%nosfg_2_sfg), &
                   mass_rate_code_unit_2_MsunPerYr*gas_mass(disc%ejecta_rate), &
                   mass_rate_code_unit_2_MsunPerYr*gas_mass(disc%sfr), &
                   mass_rate_code_unit_2_MsunPerYr*disc%sfr_burst, &
