@@ -1061,7 +1061,7 @@ contains
             gas =  disc_mass(gal1%disc,r=3.d0*r_torus,component='unstr')*disc_gas_signature(gal1%disc,component='unstr') + &
                     disc_mass(gal2%disc,r=3.d0*r_torus,component='unstr')*disc_gas_signature(gal2%disc,component='unstr')
             if (gas_mass(gas) .gt. M_BH_min) then
-                unstr_in_torus = 1.d-1*mu*mu_gas*gas
+                unstr_in_torus = mu*mu_gas*gas
                 ! this gas will be substracted in disc_update_gas_struct_history
                 ! feed the gas torus
                 call agn_add_torus_mass(gal%disc%agn,unstr_in_torus)
