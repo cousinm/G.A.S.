@@ -335,9 +335,6 @@ contains
     disc%age_form            = 0.d0                       ! will be set in disc_evolve_II during the first evolution step
     disc%t_since_last_merger = 0.d0                       ! will be set in galaxy_merge
     !
-    ! morphology
-    disc%morpho = 'clumpy'                                ! initially, disc are clumpy
-    !
     ! main components
     !
     call gas_void_gsh(disc%gsh_tab)                       ! void the gas structuration history table
@@ -390,9 +387,6 @@ contains
     disc1%life_time           = disc2%life_time
     disc1%age_form            = disc2%age_form
     disc1%t_since_last_merger = disc2%t_since_last_merger
-    !
-    ! disc morphology
-    disc1%morpho = disc2%morpho
     !
     ! main components
     disc1%gsh_tab = disc2%gsh_tab               ! copy the gas structuration history tab
@@ -1267,13 +1261,7 @@ contains
 ! ------------
 #else
 ! ------------
-        if (trim(disc%morpho) == 'clumpy') then
-            !
-            SN_wind_velocity = 1.d2/vel_code_unit_2_kmPerSec
-        else
-            !
-            SN_wind_velocity = 2.5d2/vel_code_unit_2_kmPerSec
-        end if
+        SN_wind_velocity = 1.8d2/vel_code_unit_2_kmPerSec
 #endif
 ! -------------------------------------------------
 ! SN_FEEDBACK_PROP_TO_SFR
@@ -2555,77 +2543,6 @@ contains
 
     return
   end function V_sigma_r
-
-  !*****************************************************************************************************************
-
-  function disc_update_morpho(disc1,disc2)
-
-    ! RETURN THE NEW MORPHOLOGY OF A REMANENT DISC
-
-    implicit none
-
-    real(kind=8)                      :: r                    ! a random number
-    real(kind=8),parameter            :: mu_merge = 1.d0/6.d0 ! merger mass ratio
-
-    type(disc_type),intent(in)        :: disc1                ! a disc component
-    type(disc_type),intent(in)        :: disc2                ! an other disc component
-
-    character(6)                      :: disc_update_morpho
-
-    if (trim(disc1%morpho) == 'disc') then
-        !
-        ! the first disc is a real disc
-        if (trim(disc2%morpho) == 'disc') then
-            !
-            ! the second disc is also a disc
-            disc_update_morpho = 'disc  '
-        else
-            !
-            ! the second disc is a clumpy disc
-            ! the remnent morphology is linked to the most massive disc
-            if (disc_mass(disc1) .gt. disc_mass(disc2)) then
-                !
-                ! disc1 is more massive
-                disc_update_morpho = disc1%morpho
-            else
-                !
-                ! disc2 is more massive
-                disc_update_morpho = disc2%morpho
-            end if
-        end if
-    else
-        !
-        ! the first disc is a clumpy disc
-        if (trim(disc2%morpho) == 'disc') then
-            !
-            ! the second disc is a real disc
-            ! the remnent morphology is linked to the most massive disc
-            if (disc_mass(disc1) .gt. disc_mass(disc2)) then
-                !
-                ! disc1 is more massive
-                disc_update_morpho = disc1%morpho
-            else
-                !
-                ! disc2 is more massive
-                disc_update_morpho = disc2%morpho
-            end if
-        else
-            !
-            ! the two discs are clumpy
-            ! we randomly affect new morphology
-            call random_number(r)
-            if (r < mu_merge) then
-                !
-                disc_update_morpho = 'disc  '
-            else
-                !
-                disc_update_morpho = 'clumpy'
-            end if
-        end if
-    end if
-
-    return
-  end function
 
   !*****************************************************************************************************************
   !

@@ -1077,9 +1077,6 @@ contains
                     unstr_from_bulges=unstr_from_bulges, &
                     unstr_in_torus=unstr_in_torus)
         !
-        ! Update morphology of the disc
-        gal%disc%morpho = disc_update_morpho(gal1%disc,gal2%disc)
-        !
         ! OTHER PROPERTIES
         ! for disc
         ! the time life of the remnant disc is set to the maximum value of the two progenitors
