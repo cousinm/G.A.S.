@@ -689,9 +689,9 @@ contains
     
     call gas_void(surrounding_gas_outflow_rate)                ! init
     ! 
-    if (gas_mass(bh%surrounding_gas) .le. M_gas_crit) return ! no mass
+    if (gas_mass(bh%surrounding_gas) .le. num_accuracy) return ! no mass
     
-    surrounding_gas_outflow_rate = (1.d0/max(5.d0*dm%t_dyn,dt_min))*bh%surrounding_gas
+    surrounding_gas_outflow_rate = (1.d0/max(2.d0*dm%t_dyn,dt_min))*bh%surrounding_gas
     
     return
   end subroutine baryon_halo_compute_surrounding_gas_outflow_rate
