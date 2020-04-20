@@ -475,14 +475,16 @@ contains
             ! we assume a constant ejection process during StellarTimeStep
             ! compute ejected_mass
             ej = ej_rate*StellarTimeStep*disc_gas_signature(gal%disc,apply_as='rate_builder')
-            ! set temperature of ejecta
-            call gas_inject_termal_energy(ej,Qt*StellarTimeStep)
-            T_ej = gas_temp(ej)
-            ! by using Vesc, Vwind and T_ej we can compute a prediction for f_in
-            Vesc = dm_escape_velocity(dm%r_core,dm)
-            f_in = min(1.d0,max(0.d0,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/T_ej,Vw/))))
-            if (f_in .le. 1.d-2)  f_in = 0.d0
-            if (f_in .gt. 9.9d-1) f_in = 1.d0
+            if (gas_mass(ej) .gt. 0.d0) then
+                ! set temperature of ejecta
+                call gas_inject_termal_energy(ej,Qt*StellarTimeStep)
+                T_ej = gas_temp(ej)
+                ! by using Vesc, Vwind and T_ej we can compute a prediction for f_in
+                Vesc = dm_escape_velocity(dm%r_core,dm)
+                f_in = min(1.d0,max(0.d0,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/T_ej,Vw/), called_by='galaxy_compute_galaxy_feedback_activities')))
+                if (f_in .le. 1.d-2)  f_in = 0.d0
+                if (f_in .gt. 9.9d-1) f_in = 1.d0
+            end if
         end if
     end if
 
@@ -612,6 +614,7 @@ contains
           ! in the current model, only the disc host feedback activities
           ! the bulge is passive, the instantaneous ejecta rate is therefore given by the disc structure
           inst_gal_ejecta_rate = gas_mass(gal%disc%ejecta_rate)
+          !
           M_ej = gas_mass(gal_ejecta)
           Wu   = gas_mass(gal_ejecta_rate_Wu)
           Wd   = gas_mass(gal_ejecta_rate_Wd)

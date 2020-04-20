@@ -64,14 +64,6 @@ module stellar_population_library
   real(kind=8),parameter     :: young_stars_MaxAge     =  5.d-2 ! [Gyr] = 5.e7 yr
                                                  
   ! model parameters associated to SN feedback processes
-#ifdef SN_FEEDBACK_PROP_TO_SFR  
-! -------------------------------------------------  
-  real(kind=8),parameter     :: const_eta_sn           = 7.4e-3                                ! (M_sun^-1) nb of type II SNe per Solar mass of stars (salpeter)
-  real(kind=8),parameter     :: const_eta_sn_code_unit = const_eta_sn*mass_code_unit_in_M_Sun  ! eta_sn /10^11 Msun
-#endif
-! -------------------------------------------------
-! SN_FEEDBACK_PROP_TO_SFR   
-  
   real(kind=8),parameter     :: SN_kinetic_fraction    = 2.d0/3.d0 ! fraction of the instantaneous SN explosion power converted in kinetic power  
   real(kind=8)               :: SN_thermal_fraction    = 5.d-1     ! fraction of the instantaneous non-kinetic SN explosion power converted in thermal power  
   !real(kind=8),parameter     :: p_sn                   = 3.d4                                             ! SN momentum (Msun km/s) produced by one SN 

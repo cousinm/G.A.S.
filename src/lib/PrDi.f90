@@ -120,7 +120,7 @@ module PrDi
     call random_seed(size=nseed)
     allocate(seed(nseed))
     do i = 1, nseed
-		seed(i) = i 
+        seed(i) = i 
     end do
     call random_seed(put=seed)
 

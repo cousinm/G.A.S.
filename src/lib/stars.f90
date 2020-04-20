@@ -684,14 +684,14 @@ contains
     if (stars1%exist) then
        ! the stellar population exists
        if (abs(stars1%mass-stars2%mass) .le. M_gas_null) then
-		  ! The difference between the two stellar masses is lower than 1.0 solar mass, which is negligible	
-		  ! probably cumulative computationnal errors
-		  call stars_void(stars1)  ! erase the stellar population and --> exit
+          ! The difference between the two stellar masses is lower than 1.0 solar mass, which is negligible 
+          ! probably cumulative computationnal errors
+          call stars_void(stars1)  ! erase the stellar population and --> exit
              return 
        else 
-		  ! The remanent stellar mass is not negligable 
-		  if (stars2%mass .le. stars1%mass) then
-			 ! stars1 is more massive than stars2 --> OK
+          ! The remanent stellar mass is not negligable 
+          if (stars2%mass .le. stars1%mass) then
+             ! stars1 is more massive than stars2 --> OK
              stars1%mass = stars1%mass - stars2%mass  ! substarct stellar mass
              ! the remanent stellar mass is not negligable 
              stars1%iMaxAge = max(stars1%iMaxAge,stars2%iMaxAge)                     ! compute max index of sfh_tab 
@@ -715,14 +715,14 @@ contains
                 end do
                 call stars_compute_properties(stars1) ! normalisation
              end if
-		  else
-			 call IO_print_error_message('stars1%mass < stars2%mass', &
-				   only_rank = rank, called_by = trim(message))
-			 call IO_print_message('with',only_rank=rank,component='stars', &
-				   param_name = (/'stars1%mass              ','stars2%mass              ' /), real_param_val  = (/stars1%mass,stars2%mass/))
-			 stop ! stop the program
-		  end if
-	   end if
+          else
+             call IO_print_error_message('stars1%mass < stars2%mass', &
+                   only_rank = rank, called_by = trim(message))
+             call IO_print_message('with',only_rank=rank,component='stars', &
+                   param_name = (/'stars1%mass              ','stars2%mass              ' /), real_param_val  = (/stars1%mass,stars2%mass/))
+             stop ! stop the program
+          end if
+       end if
     else 
        ! the stellar popualtion stars1 doesn't exist
        if (stars_mass(stars1) .gt. 0.d0) then
