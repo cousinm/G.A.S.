@@ -559,19 +559,16 @@ contains
     rate = sfr
     !
     ! The structured/fragmented gas can be disrupted by SN+AGN kinetic energy injection
-    if (f_unstr .lt. 1.d0) then
-        !
-        ! A fraction of the enery injected into the structured/fragmented gas allows to disrupt it
-        ! The residual turbulent energy (non used to disrupt the dense gas) is saved in Qturb_unstr
-        disrupt_rate = (1.d0-f_unstr)*disrupt_str_gas_rate(disc,Qturb,Qturb_unstr=Qturb_unstr)* &
+    ! A fraction of the enery injected into the structured/fragmented gas allows to disrupt it
+    ! The residual turbulent energy (non used to disrupt the dense gas) is saved in Qturb_unstr
+    disrupt_rate = disrupt_str_gas_rate(disc,Qturb,Qturb_unstr=Qturb_unstr)* &
                     disc_gas_signature(disc,component='structured',apply_as='rate_builder',called_by='disrupt_rate')
-        rate = rate + disrupt_rate
-    end if
+    rate = rate + disrupt_rate
     !
     ! The structured/fragmented gas can be ejected from the disc due to SN+AGN kinetic energy injection
     ! update ejecta_rate
     call gas_void(tmp_rate)
-    tmp_rate = (1.d0-f_unstr)*ej*gas_ejecta_signature(disc_gas_signature(disc,component='structured',apply_as='rate_builder',called_by='ejecta_rate/str'))
+    tmp_rate = (1.d0-f_unstr)*ej*disc_gas_signature(disc,component='structured',apply_as='rate_builder',called_by='ejecta_rate/str')
     ! tmp_rate is used to update
     ejecta_rate = ejecta_rate + tmp_rate
     ! and update
@@ -1054,9 +1051,7 @@ contains
       Qrad          = 0.d0
     end if
 
-    tot_gas = disc_mass(disc,component='all')
-
-    if (tot_gas .lt. M_gas_min) return ! no ism
+    tot_gas = disc_mass(disc,component='gas')
 
     ! @ this point feedback is possible
     !
@@ -1122,17 +1117,19 @@ contains
          ! we assume a constant ejection process during a StellarTimeStep
          ! compute ejected_mass
          ej = ejecta_rate*StellarTimeStep*disc_gas_signature(disc,apply_as='rate_builder')
-         ! set temperature of ejecta
-         call gas_inject_termal_energy(ej,Qt*StellarTimeStep)
-         T_ej = gas_temp(ej)
-         f_esc = 1.d0 - min(1.d0,max(0.d0,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/T_ej,Vwind_SN/))))
-         ejecta_rate = f_esc*SN_ej_rate + AGN_ej_rate
-         !
-         if (present(Qturb)) then
+         if (gas_mass(ej) .gt. 0.d0) then
+            ! set temperature of ejecta
+            call gas_inject_termal_energy(ej,Qt*StellarTimeStep)
+            T_ej = gas_temp(ej)
+            f_esc = 1.d0 - min(1.d0,max(0.d0,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/T_ej,Vwind_SN/),called_by='disc_compute_disc_feedback_activities')))
+            ejecta_rate = f_esc*SN_ej_rate + AGN_ej_rate
             !
-            ! Add power non used in real ejecta (1-fesc) into the turbulent motion
-            Qturb = Qturb + (1.d0 - f_esc)*5.d-1*SN_ej_rate*Vwind_SN**2.
-         end if
+            if (present(Qturb)) then
+                !
+                ! Add power non used in real ejecta (1-fesc) into the turbulent motion
+                Qturb = Qturb + (1.d0 - f_esc)*5.d-1*SN_ej_rate*Vwind_SN**2.
+            end if
+          end if
        end if
     end if
 
@@ -1145,7 +1142,6 @@ contains
     function SN_ejecta_rate(disc)
 
         ! COMPUTE EJECTA RATE OF THE DISC COMPONENT
-        ! We assumed that the gas ejecta rate is composed of unstructured gas
 
         implicit none
 
@@ -1154,18 +1150,11 @@ contains
         real(kind=8)               :: eta_sn  ! SN event rate
         real(kind=8)               :: SN_ejecta_rate
 
-#ifdef SN_FEEDBACK_PROP_TO_SFR
-! -------------------------------------------------
-        real(kind=8)               :: sfr     ! star formation rate
-#endif
-! -------------------------------------------------
-! SN_FEEDBACK_PROP_TO_SFR
-
         type(disc_type),intent(in) :: disc    ! the disc component
 
         SN_ejecta_rate = 0.d0 ! init
 
-        tot_gas = disc_mass(disc,component='all')
+        tot_gas = disc_mass(disc,component='gas')
 
         if (disc_ejecta_efficiency .le. 0.d0) return  ! no ejecta takes into account
         !
@@ -1174,26 +1163,10 @@ contains
         !
         if (Vwind .le. 0.d0) return
         !
-#ifdef SN_FEEDBACK_PROP_TO_SFR
-! -------------------------------------------------
-        sfr = disc_SFR(disc) ! in code unit (10^11 Msun / Gyr)
-        eta_sn = const_eta_sn_code_unit
-        ! Energy driven
-        if (sfr .gt. 0.d0) then
-            !
-            ! in code unit 10^11 Msun / Gyr
-            SN_ejecta_rate = 2.d0*disc_ejecta_efficiency*eta_sn*SN_kinetic_fraction*Esn_code_unit*sfr/Vwind**2
-        end if
-! ------------
-#else
-! ------------
         eta_sn = disc%stars%SN_rate
         ! Energy driven
         ! in code unit 10^11 Msun / Gyr
         SN_ejecta_rate = 2.d0*disc_ejecta_efficiency*eta_sn*SN_kinetic_fraction*Esn_code_unit/Vwind**2
-#endif
-! -------------------------------------------------
-! SN_FEEDBACK_PROP_TO_SFR
         !
         ! Check the result and crash the code if:
         ! disc_compute_disc_SN_ejecta_rate is NAN
@@ -1226,47 +1199,21 @@ contains
 
       function SN_wind_velocity(disc)
 
-        ! COMPUTE WIND VELOCITY OF DISC EJECTA
-        ! this velocity is linked to the star formation activity in the disc component
-        ! Bertone+05 Eq. (9)
+         ! RETURN WIND VELOCITY OF DISC EJECTA
 
-        implicit none
+         implicit none
 
-        real(kind=8)                :: SN_wind_velocity  ! the velocity (in code unit) of the ejecta wind
-#ifdef SN_FEEDBACK_PROP_TO_SFR
-! -------------------------------------------------
-        real(kind=8)                :: sfr               ! sfr
-#endif
-! -------------------------------------------------
-! SN_FEEDBACK_PROP_TO_SFR
+         real(kind=8)                :: SN_wind_velocity  ! the velocity (in code unit) of the ejecta wind
 
-        type(disc_type),intent(in)  :: disc              ! the disc component
+         type(disc_type),intent(in)  :: disc              ! the disc component
 
-        SN_wind_velocity = 0.d0 ! init
+         SN_wind_velocity = 0.d0 ! init
 
-        if (disc_ejecta_efficiency .le. 0.d0)  return ! no ejecta takes into account
+         if (disc_ejecta_efficiency .le. 0.d0)  return ! no ejecta takes into account
 
-#ifdef SN_FEEDBACK_PROP_TO_SFR
-! -------------------------------------------------
-        ! Compute sfr
-        sfr = disc_SFR(disc)
-        !
-        if (sfr .le. 0.d0) return
-        !
-        ! sfr must be converted in Msun/yr (1.d2) but in Bertone+05 Eq.(9) sfr must be in unit of 100Msun/yr
-        ! wind efficiency is a free parameter given in input
-        SN_wind_velocity = 623.d0*sfr**0.145*sqrt(1.d0/disc_ejecta_efficiency) ! in km/s
-        ! convert in code unit
-        SN_wind_velocity = SN_wind_velocity/vel_code_unit_2_kmPerSec
-! ------------
-#else
-! ------------
-        SN_wind_velocity = 1.8d2/vel_code_unit_2_kmPerSec
-#endif
-! -------------------------------------------------
-! SN_FEEDBACK_PROP_TO_SFR
+         SN_wind_velocity = 2.0d2/vel_code_unit_2_kmPerSec
 
-        return
+         return
       end function SN_wind_velocity
 
       ! *************************************************
@@ -1284,20 +1231,9 @@ contains
 
         SN_non_kinetic_power = 0.d0  ! init
 
-#ifdef SN_FEEDBACK_PROP_TO_SFR
-! -------------------------------------------------
-        eta_sn = const_eta_sn_code_unit
-        SN_non_kinetic_power = &     ! in code unit (10^11.Msun.kpc^2/Gyr^3)
-              eta_sn*(1.d0 - SN_kinetic_fraction)*Esn_code_unit*disc_SFR(disc)
-! ------------
-#else
-! ------------
         eta_sn = disc%stars%SN_rate
         SN_non_kinetic_power = &     ! in code unit (10^11.Msun.kpc^2/Gyr^3)
               eta_sn*(1.d0 - SN_kinetic_fraction)*Esn_code_unit
-! -------------------------------------------------
-#endif
-! SN_FEEDBACK_PROP_TO_SFR
 
         return
       end function SN_non_kinetic_power
@@ -1353,20 +1289,9 @@ contains
 
         if (disc_ejecta_efficiency .le. 0.d0) return  ! no ejecta takes into account
 
-#ifdef SN_FEEDBACK_PROP_TO_SFR
-! -------------------------------------------------
-        eta_sn = const_eta_sn_code_unit
-        SN_turbulent_heating_power = &     ! in code unit (10^11.Msun.kpc^2/Gyr^3)
-              (1.d0-disc_ejecta_efficiency)*eta_sn*SN_kinetic_fraction*Esn_code_unit*disc_SFR(disc)
-! ------------
-#else
-! ------------
         eta_sn = disc%stars%SN_rate
         SN_turbulent_heating_power = &     ! in code unit (10^11.Msun.kpc^2/Gyr^3)
               (1.d0-disc_ejecta_efficiency)*eta_sn*SN_kinetic_fraction*Esn_code_unit
-! -------------------------------------------------
-#endif
-! SN_FEEDBACK_PROP_TO_SFR
 
         return
       end function SN_turbulent_heating_power
@@ -1808,7 +1733,7 @@ contains
         !
         ! A specific component of the gas is selected
         select case (trim(component))
-        case ('all','gas')
+        case ('gas')
             disc_mass = gas_mass(disc%gsh_tab%gas(1),component=element)             ! diffuse gas
             disc_mass = disc_mass + gas_mass(disc%gsh_tab%gas(2),component=element) ! structured/fragemented gas
         case ('agn','SMBH','black-hole')
@@ -1894,15 +1819,20 @@ contains
                                                             ! when this function is used as an output rate builder, we have to check critical mass
     character(MAXPATHSIZE)            :: message            ! a message to display
 
+    real(kind=8)                      :: f_unstr            ! mass fraction of unstructured/diffuse gas
+    
     type(gas_type)                    :: disc_gas_signature ! the gas signature
 
     type(disc_type),intent(in)        :: disc               ! a disc component
 
     call gas_void(disc_gas_signature)
 
-    ! sum over all gas components
-    disc_gas_signature = disc%gsh_tab%gas(1)                      ! diffuse gas
-    disc_gas_signature = disc_gas_signature + disc%gsh_tab%gas(2) ! structured/fragmented gas
+    f_unstr = disc_gas_fraction(disc, component='unstr')
+    ! gas signature of the complete disc
+    ! WARNING, as in disc_evolve_I, the gas signature has to be applied to each component 
+    ! (because of the M_gas_crit threshold)
+    disc_gas_signature = f_unstr*gas_signature(disc%gsh_tab%gas(1),apply_as=apply_as,called_by=called_by)  ! diffuse gas
+    disc_gas_signature = disc_gas_signature + (1.d0-f_unstr)*gas_signature(disc%gsh_tab%gas(2),apply_as=apply_as,called_by=called_by)  ! diffuse gas ! structured/fragmented gas
 
     if (present(component)) then
         !
@@ -1912,16 +1842,12 @@ contains
         case('structured','str','fragmented')
             disc_gas_signature = gas_signature(disc%gsh_tab%gas(2),apply_as=apply_as,called_by=called_by)
         case ('all','gas')
-            disc_gas_signature = gas_signature(disc_gas_signature,apply_as=apply_as,called_by=called_by)
+            disc_gas_signature = disc_gas_signature
         case default
             write(message,'(a,a,a)') 'Keyword ', trim(component), ' not defined'
             call IO_print_error_message(message,only_rank=rank,called_by='disc_gas_signature')
             stop  ! stop the program
         end select
-    else
-        !
-        ! use all gas as defaut value
-        disc_gas_signature = gas_signature(disc_gas_signature,apply_as=apply_as,called_by=called_by)
     end if
 
     return
@@ -2129,7 +2055,7 @@ contains
 
      disc_gas_fraction = 0.d0 ! init
 
-     M_gas = disc_mass(disc,component='all')
+     M_gas = disc_mass(disc,component='gas')
      if (M_gas .le. 0.d0) return
 
      if (present(component)) then
@@ -2150,7 +2076,7 @@ contains
         !
         select case (trim(component))
         
-        case ('all','gas')
+        case ('gas')
             !
             disc_gas_fraction = gas_mass(disc%gsh_tab%gas(1),component=subcomponent) ! diffuse gas
             disc_gas_fraction = disc_gas_fraction + gas_mass(disc%gsh_tab%gas(2),component=subcomponent) ! structured gas
@@ -2319,10 +2245,10 @@ contains
         Eturb = max(0.d0,Egrav-Ekin)
         fdisp = 0.d0 ! iitially no dissipation
         if (Eturb .gt. 0.d0) then
-			! we assume that a fraction of the turbulent energy is lost during a dissipation timescale
-			t_disp = 5.d-1*Ekin/Eturb*(racc / Vacc)
-			fdisp  = min(1.d0,dt/t_disp)
-		end if
+            ! we assume that a fraction of the turbulent energy is lost during a dissipation timescale
+            t_disp = 5.d-1*Ekin/Eturb*(racc / Vacc)
+            fdisp  = min(1.d0,dt/t_disp)
+        end if
         Edisp1 = (1.d0-fdisp)*Eturb
         !
         ! pre-formed disc

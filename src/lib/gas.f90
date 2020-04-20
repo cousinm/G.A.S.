@@ -779,7 +779,7 @@ contains
         !
         if (Tw .gt. 0.d0) then
             ! fraction of gas in the wind which is kept into the halo
-            f_in = min(1.d0,max(0.d0,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/Tw,Vwind/))))
+            f_in = min(1.d0,max(0.d0,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/Tw,Vwind/),called_by='gas_add / f_in')))
             if (f_in .gt. 9.9d-1) f_in = 1.d0
             !
             if ((f_in .gt. 1.d-2) .and. (f_in .le. 1.d0)) then
@@ -1324,33 +1324,6 @@ contains
 
   !***********************************************************************************************************
 
-  function gas_ejecta_signature(gas)
-
-    implicit none
-
-    type(gas_type),intent(in)  :: gas
-    type(gas_type)             :: gas_ejecta_signature
-
-    ! copy the gas component
-    gas_ejecta_signature = gas
-
-!~     ! apply numerical factor
-!~     gas_ejecta_signature%mZ = 1.58d-1*gas_ejecta_signature%mZ
-!~     !
-!~     if (allocated(gas_ejecta_signature%elts)) then
-!~        gas_ejecta_signature%elts(:) = gas_ejecta_signature%elts(:) * (/6.73d-1,1.68d-1,5.6d-2,4.8d-2,4.2d-2,1.2d-2/)
-!~     else
-!~        call IO_print_error_message('Try to use a non-existent ISM gas component ',only_rank=rank,called_by='gas_ejecta_signature')
-!~        call IO_print_message('with',only_rank=rank,component='gas', &
-!~               param_name=(/'gas%mass                 ','gas%mZ                   '/), real_param_val=(/gas%mass,gas%mZ/))
-!~        stop ! stop the program
-!~     endif
-
-    return
-  end function gas_ejecta_signature
-
-  !*****************************************************************************************************************
-
   function gas_mass(gas,component)
 
     ! RETURN THE TOTAL MASS OF THE GAS COMPONENT
@@ -1588,7 +1561,7 @@ contains
                     ! output rate dominated
                     ! void in the next time step
                     case_applied = 'out rate dominated / void'
-                    dM = M -5.d-1*M_gas_null
+                    dM = M - M_gas_null
                  end if
                  !
                  gas_dt_optim = min(gas_dt_optim, dM/abs(rate))

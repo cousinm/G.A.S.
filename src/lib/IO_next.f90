@@ -1002,13 +1002,6 @@ module IO_next
 ! -------------------------------------------------
 #endif
 ! endif REACCRETION
-    !
-#ifdef SN_FEEDBACK_PROP_TO_SFR
-! -------------------------------------------------
-    write(log_file_unit,'(a)')      ' SN_FEEDBACK_PROP_TO_SFR'
-! -------------------------------------------------
-#endif 
-! endif SN_FEEDBACK_PROP_TO_SFR
     !       
 #ifdef SUB_QUENCHING
 ! -------------------------------------------------
