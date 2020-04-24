@@ -65,7 +65,7 @@ module stellar_population_library
                                                  
   ! model parameters associated to SN feedback processes
   real(kind=8),parameter     :: SN_kinetic_fraction    = 2.d0/3.d0 ! fraction of the instantaneous SN explosion power converted in kinetic power  
-  real(kind=8)               :: SN_thermal_fraction    = 5.d-1     ! fraction of the instantaneous non-kinetic SN explosion power converted in thermal power  
+  real(kind=8)               :: SN_thermal_fraction    = 9.9d-1     ! fraction of the instantaneous non-kinetic SN explosion power converted in thermal power  
   !real(kind=8),parameter     :: p_sn                   = 3.d4                                             ! SN momentum (Msun km/s) produced by one SN 
                                                                                                           ! assuming that each SN produce 10M_sun of material moving a v = 3000 km.s-1 
   !real(kind=8),parameter     :: p_sn_code_unit         = p_sn/mass_code_unit_in_M_Sun/kpc_in_km*Gyr_in_s  ! Supernovae momentum in code unit : 10^11 Msun * kpc / Gyr

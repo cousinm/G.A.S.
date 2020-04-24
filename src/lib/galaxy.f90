@@ -443,6 +443,7 @@ contains
     real(kind=8)                      :: ej_rate
     real(kind=8),intent(out),optional :: agn_acc_rate     ! the accretion rate onto the SMBH
     real(kind=8),intent(out),optional :: Vwind            ! the rate-weighted velocity of the wind produced by feedback processes
+    real(kind=8)                      :: Vesc             ! escape velocity
     real(kind=8)                      :: Vw               ! the rate-weighted velocity of the wind produced by feedback processes
     real(kind=8),intent(out),optional :: Qtherm           ! thermal power (allow to compute mean wind temperature)
     real(kind=8)                      :: Qt
@@ -450,14 +451,16 @@ contains
     real(kind=8),intent(out),optional :: Qrad             ! non kinetic and non-thermal power (radiations: allow to reduced the effective cooling rate)
     real(kind=8),intent(out),optional :: f_in             ! predicted fraction of galaxy ejected-mass that is catched by the dark matter potentiel well
     real(kind=8)                      :: T_ej             ! predicted temperature of galaxy ejecta
-    real(kind=8)                      :: Vesc             ! escape velocity associated to the dark matter halo
 
     type(gas_type)                    :: ej               ! ejecta
     type(galaxy_type),intent(in)      :: gal              ! the galaxy component
     type(dm_type),intent(in)          :: dm               ! the dm component
 
+	! init
+	ej_rate = 0.d0
     ! disc_compute_disc_feedback_activities(disc,Vesc,ejecta_rate,agn_acc_rate,Vwind,Qtherm,Qrad)
-    call disc_compute_disc_feedback_activities(gal%disc,gal%Vesc, &
+    Vesc = galaxy_escape_velocity(gal,dm)
+    call disc_compute_disc_feedback_activities(gal%disc,Vesc, &
           ejecta_rate=ej_rate,agn_acc_rate=agn_acc_rate,Vwind=Vw,Qtherm=Qt,Qturb=Qturb,Qrad=Qrad)
     !
     ! set ejecta_rate
@@ -475,7 +478,7 @@ contains
             ! we assume a constant ejection process during StellarTimeStep
             ! compute ejected_mass
             ej = ej_rate*StellarTimeStep*disc_gas_signature(gal%disc,apply_as='rate_builder')
-            if (gas_mass(ej) .gt. 0.d0) then
+            if (gas_mass(ej) .gt. M_gas_crit) then
                 ! set temperature of ejecta
                 call gas_inject_termal_energy(ej,Qt*StellarTimeStep)
                 T_ej = gas_temp(ej)
@@ -601,7 +604,7 @@ contains
           if (disc_mass(gal%disc) .ge. 0.d0) then
             !
             ! compute optimal integration time for the disc component
-            call disc_evolve_I(gal%disc,dm,gal%Vesc,fresh_gas_acc_rate,gal_stripping_rate,disc_dt_optim)
+            call disc_evolve_I(gal%disc,dm,gal%bulge,gal%R50,fresh_gas_acc_rate,gal_stripping_rate,disc_dt_optim)
             !
             if (disc_dt_optim .gt. 0.d0) then
               disc_dt_optim = min((dt-disc_time),disc_dt_optim)
@@ -742,7 +745,7 @@ contains
       ! ********************************************
       !
       if (abs(disc_next_stop - gal_time) .lt. num_accuracy) then
-        call disc_evolve_II(gal%disc,dm,gal%bulge,disc_dt_optim)
+        call disc_evolve_II(gal%disc,dm,gal%bulge,gal%R50,disc_dt_optim)
         disc_time = disc_next_stop
         gal_time  = disc_next_stop
       end if
@@ -795,10 +798,11 @@ contains
                 param_name=(/'dt                       ','gal_dt_optim             ','gal_time                 ', &
                              'disc_next_stop           ','disc_dt_optim            ','disc_time                ', &
                              'bulge_next_stop          ','bulge_dt_optim           ','bulge_time               ', &
-                             'stripping_rate           ','inst_gal_ejecta_rate     '/), &
+                             'stripping_rate           ','inst_gal_ejecta_rate     ','Wu                       ', &
+                             'Wd                       '/), &
                 real_param_val=(/dt,gal_dt_optim,gal_time,disc_next_stop, &
                                  disc_dt_optim,disc_time,bulge_next_stop,bulge_dt_optim,bulge_time, &
-                                 gal%disc%stripping_rate%mass, inst_gal_ejecta_rate/))
+                                 gal%disc%stripping_rate%mass, inst_gal_ejecta_rate, Wu, Wd/))
       write(*,*) 'sbe: ', stop_before_end
       stop ! stop the program
     end if
@@ -865,7 +869,7 @@ contains
         ! galaxy global properties
         gal%R50_stars = galaxy_frac_mass_radius(gal,5.d-1,component='stars',called_by='galaxy_evolve') ! radius which enclose 50% of the galaxy stellar mass
         gal%R50       = galaxy_frac_mass_radius(gal,5.d-1,called_by='galaxy_evolve')                   ! radius which enclose 50% of the galaxy mass (stars + gas)
-        gal%Vesc      = galaxy_compute_escape_velocity(gal,dm)                                         ! escape velocity of the galaxy
+        gal%Vesc      = galaxy_escape_velocity(gal,dm)                                                 ! escape velocity of the galaxy
         gal%Vwind     = Vwind                                                                          ! (time-)mean ejecta wind velocity
         ! mass assembly properties
         ! update the gas mass accreted by galaxy over the galaxy's history
@@ -1080,6 +1084,13 @@ contains
                     unstr_from_bulges=unstr_from_bulges, &
                     unstr_in_torus=unstr_in_torus)
         !
+        ! compute some Galaxy global properties
+        ! the half-mass radius
+        gal%R50_stars = galaxy_frac_mass_radius(gal,5.d-1,called_by='galaxy_merge',component='stars')
+        gal%R50       = galaxy_frac_mass_radius(gal,5.d-1,called_by='galaxy_merge')
+        ! the escape velocity
+        gal%Vesc      = galaxy_escape_velocity(gal,dm1)
+        !
         ! OTHER PROPERTIES
         ! for disc
         ! the time life of the remnant disc is set to the maximum value of the two progenitors
@@ -1099,7 +1110,7 @@ contains
         ! computed dynamical time
         gal%disc%t_dyn     = disc_dynamical_time(gal%disc,dm1,gal%bulge)
         ! compute velocity dispersion
-        gal%disc%dV        = disc_update_velocity_dispersion(gal1%disc,disc2=gal2%disc)
+        gal%disc%dV        = disc_update_velocity_dispersion(gal1%disc,gal%Vesc,disc2=gal2%disc)
         ! compute the scale height of the disc
         gal%disc%h         = disc_scale_height(gal%disc)
         ! update inertial cascade properties t_emp, t_form, t_cascade, ngc
@@ -1140,12 +1151,7 @@ contains
         gal%life_time = max(gal1%life_time,gal2%life_time)
         ! age_form is set to the minimum value of the two progenitors
         gal%age_form  = min(gal1%age_form,gal2%age_form)
-        ! compute other global properties
-        ! the half-mass radius
-        gal%R50_stars = galaxy_frac_mass_radius(gal,5.d-1,called_by='galaxy_merge',component='stars')
-        gal%R50       = galaxy_frac_mass_radius(gal,5.d-1,called_by='galaxy_merge')
-        ! the escape velocity
-        gal%Vesc      = galaxy_compute_escape_velocity(gal,dm1)
+        !
         ! global stellar properties (Age and Z)
         call stars_void(stars_tmp)                   ! Create the global stellar population
         stars_tmp = gal%disc%stars + gal%bulge%stars !
@@ -1748,7 +1754,7 @@ contains
     end if
     !
     ! test with r_max and crash the code if the optimal radius is larger than this barrier.
-    mass        = galaxy_mass(gal,r=r_max,component=component)
+    mass = galaxy_mass(gal,r=r_max,component=component)
     !
     if (mass .lt. target_mass) then
       call IO_print_error_message('Optimal r > r_max', &
@@ -1835,34 +1841,28 @@ contains
 
   !*****************************************************************************************************************
 
-  function galaxy_compute_escape_velocity(gal,dm)
+  function galaxy_escape_velocity(gal,dm)
 
     ! RETURNS THE ESCAPE VELOCITY OF THE GALAXY (in code unit)
     ! This function have to be called after the computation of gal%R50
 
     implicit none
 
-    real(kind=8)                    :: galaxy_compute_escape_velocity
-    real(kind=8)                    :: N_clumps
+    real(kind=8)                    :: galaxy_escape_velocity
 
     type(galaxy_type),intent(in)    :: gal   ! the galaxy component
     type(dm_type),intent(in)        :: dm    ! the dark matter component
 
-    galaxy_compute_escape_velocity = -1.d0   ! init
+    galaxy_escape_velocity = -1.d0   ! init
 
     if (galaxy_mass(gal) .le. 0.d0) return   ! no galaxy
 
     if (gal%R50 .gt. 0.d0) then
-        N_clumps = min(3.d1,max(2.d0,real(gal%disc%ngc,4)))
-        galaxy_compute_escape_velocity = sqrt(2.d0*gravconst_code_unit*( &
-                            disc_mass(gal%disc,r=gal%R50,component='stars') + &
-                            disc_mass(gal%disc,r=gal%R50,component='gas')/N_clumps + &
-                            bulge_mass(gal%bulge,r=gal%R50) &
-                            + dm_mass(dm,r=gal%R50))/gal%R50)
+       galaxy_escape_velocity = disc_escape_velocity(gal%disc,gal%bulge,dm,gal%R50)
     end if
 
     return
-  end function
+  end function galaxy_escape_velocity
 
   !*****************************************************************************************************************
   !

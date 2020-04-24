@@ -482,7 +482,7 @@ contains
         ! convert inst_galaxy_ejecta_rate (real 8) into a gas object
         ! we assume that ejecta have a similar composition than the galaxy disc
         call gas_void(galaxy_ejecta_rate)      ! init
-        galaxy_ejecta_rate = inst_galaxy_ejecta_rate*galaxy_gas_signature(h%galaxy,component='disc',apply_as='rate_builder',called_by='galaxy_ejecta_rate')
+        galaxy_ejecta_rate = inst_galaxy_ejecta_rate*galaxy_gas_signature(h%galaxy,component='disc',apply_as='rate_builder',called_by='halo_evolve')
         !
         call baryon_halo_evolve_hot_gas_I(h%baryon_halo,h%dm,galaxy_ejecta_rate,f_in, &
                     hot_dt_optim,galaxy_ejecta_rate_Wd,galaxy_ejecta_rate_Wu,f_in_Wd,f_in_Wu)                   ! init

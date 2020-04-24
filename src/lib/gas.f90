@@ -498,11 +498,12 @@ contains
     endif
 
     ! Init timescales
-    gsh%t_cascade =  0.d0
-    gsh%t_form    =  0.d0
-    gsh%t_eq      =  0.d0
-    gsh%t_prod    =  0.d0
-    gsh%t_emp     =  0.d0
+    gsh%t_cascade = 0.d0
+    gsh%t_eq      = t_eq_max
+    gsh%t_form    = 9.9d-1*t_eq_max
+    gsh%t_emp     = t_str_max
+    gsh%t_prod    = 9.9d-1*t_str_max
+    
    
     ! By default the gas structuration history contain the diffuse, the structured/fragmented gas cells
     ! 1 : unstructured / diffuse gas
@@ -1303,10 +1304,11 @@ contains
             ! run throup gas components
             do comp = 1, nElts +2
                 Mcomp = gas_mass(gas,component=trim(gas_component(comp)))
-                if (Mcomp .le. M_gas_crit) then
+                if (Mcomp .lt. M_gas_crit) then
                     signature = 0.d0
                 else
                     signature = slope_limiter(Mcomp,M_gas_crit)*Mcomp/M
+                    if (signature .lt. 1.d-50) signature = 0.d0
                 end if
                 call gas_set_component(gas_signature,signature,component=trim(gas_component(comp)))
             end do
