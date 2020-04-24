@@ -473,7 +473,7 @@ contains
     if (present(Qtherm)) Qtherm = Qt
     !
     if (present(f_in)) then
-        f_in = 0.d0 ! init
+        f_in = 1.d0 ! init
         if (ej_rate .gt. 0.d0) then
             ! we assume a constant ejection process during StellarTimeStep
             ! compute ejected_mass

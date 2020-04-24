@@ -1111,7 +1111,7 @@ contains
     end if
     !
     ! apply correction factor to the ejecta rate due to escape galaxy velocity
-    f_esc = 1.d0 ! init
+    f_esc = 0.d0 ! init
     if (present(ejecta_rate)) then
        !
        if (ejecta_rate .gt. 0.d0) then
