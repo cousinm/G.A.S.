@@ -1123,10 +1123,10 @@ contains
             ! set temperature of ejecta
             call gas_inject_termal_energy(ej,Qt*StellarTimeStep)
             T_ej = gas_temp(ej)
-            f_esc = 1.d0 - min(1.d0,max(0.d0,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/T_ej,Vwind_SN/),called_by='disc_compute_disc_feedback_activities')))
+            f_esc = 1.d0 - min(1.d0,max(0.d0,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/T_ej,Vw/),called_by='disc_compute_disc_feedback_activities')))
             if (f_esc .le. 1.d-2)  f_esc = 0.d0
             if (f_esc .gt. 9.9d-1) f_esc = 1.d0
-            ejecta_rate = f_esc*SN_ej_rate + AGN_ej_rate
+            ejecta_rate = f_esc*(SN_ej_rate + AGN_ej_rate)
             !
             if (present(Qturb)) then
                 !
