@@ -781,9 +781,10 @@ contains
         if (Tw .gt. 0.d0) then
             ! fraction of gas in the wind which is kept into the halo
             f_in = min(1.d0,max(0.d0,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/Tw,Vwind/),called_by='gas_add / f_in')))
-            if (f_in .gt. 9.9d-1) f_in = 1.d0
+            !if (f_in .lt. 1.d-2) f_in = 0.d0
+            !if (f_in .gt. 9.9d-1) f_in = 1.d0
             !
-            if ((f_in .gt. 1.d-2) .and. (f_in .le. 1.d0)) then
+            if ((f_in .gt. 0.d0) .and. (f_in .le. 1.d0)) then
                ! A fraction of the wind is catched by the hot atmosphere
                ! set escape gas
                m_esc = (1.d0-f_in)*g

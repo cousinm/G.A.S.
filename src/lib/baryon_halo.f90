@@ -1424,7 +1424,7 @@ contains
         stop  ! stop the program
     end if
     !
-    if ((gas_mass(bh%hot_gas) .gt. M_gas_crit) .and. (gas_temp(bh%hot_gas) .lt. 9.9d-1*diffuse_gas_temp)) then
+    if ((gas_mass(bh%hot_gas) .gt. 0.d0) .and. (gas_temp(bh%hot_gas) .lt. 9.9d-1*diffuse_gas_temp)) then
         !
         call IO_print_warning_message('T_hot < T_cool_gas',only_rank=rank,called_by='baryon_halo_evolve_hot_gas')
 #ifdef PRINT_WARNING

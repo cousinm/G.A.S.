@@ -478,15 +478,15 @@ contains
             ! we assume a constant ejection process during StellarTimeStep
             ! compute ejected_mass
             ej = ej_rate*StellarTimeStep*disc_gas_signature(gal%disc,apply_as='rate_builder')
-            if (gas_mass(ej) .gt. M_gas_crit) then
+            if (gas_mass(ej) .gt. M_gas_null) then
                 ! set temperature of ejecta
                 call gas_inject_termal_energy(ej,Qt*StellarTimeStep)
                 T_ej = gas_temp(ej)
                 ! by using Vesc, Vwind and T_ej we can compute a prediction for f_in
                 Vesc = dm_escape_velocity(dm%r_core,dm)
                 f_in = min(1.d0,max(0.d0,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/T_ej,Vw/), called_by='galaxy_compute_galaxy_feedback_activities')))
-                if (f_in .le. 1.d-2)  f_in = 0.d0
-                if (f_in .gt. 9.9d-1) f_in = 1.d0
+				!if (f_in .lt. 1.d-2) f_in = 0.d0
+                !if (f_in .gt. 9.9d-1) f_in = 1.d0
             end if
         end if
     end if
@@ -833,8 +833,8 @@ contains
         ! We use gal_ejecta, the integrated gas mass ejected during dt_optim
         call gas_inject_termal_energy(gal_ejecta,Qtherm)
         if (gas_temp(gal_ejecta) .lt. diffuse_gas_temp) then
-            write(message,'(a)') 'T_ej < T_cool_gas; set T_ej gas to T_cool'
-            call IO_print_warning_message(message,only_rank=rank,called_by='galaxy_evolve')
+        !   write(message,'(a)') 'T_ej < T_cool_gas; set T_ej gas to T_cool'
+        !   call IO_print_warning_message(message,only_rank=rank,called_by='galaxy_evolve')
             call gas_set_component(gal_ejecta,diffuse_gas_temp,component='Temp')
         end if
         !
