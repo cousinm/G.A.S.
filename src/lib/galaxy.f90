@@ -115,23 +115,23 @@ module galaxy
   ! hdu reference for galaxy structure
   integer(kind=4)           :: hdu_gal
   ! printable physical properties for galaxy structure
-  integer(kind=4),parameter :: nb_gal_field = 17    ! Number of gal properties saved
+  integer(kind=4),parameter :: nb_gal_field = 18    ! Number of gal properties saved
   ! Name of each output colomn data
   character(len=ttype_len),dimension(nb_gal_field) :: ttype_gal = (/'nb_merger             ','nb_major_merger       ','tilt                  ',&
                                                                     'accreted_mass         ','merger_mass           ','m_stars               ',&
                                                                     'mu_tot                ','mu_gas                ','R50_stars             ',&
                                                                     'disc_bulge_ratio      ','gal_stars_age_MW      ','gal_stars_dage_MW     ',&
                                                                     'gal_stars_age_LW      ','gal_stars_dage_LW     ','gal_Z_stars_MW        ',&
-                                                                    'gal_Z_stars_LW        ','gal_Vesc              '/)
+                                                                    'gal_Z_stars_LW        ','gal_Vesc              ','gal_Vwind             '/)
   ! Physical unit of each column data
   character(len=tunit_len),dimension(nb_gal_field) :: tunit_gal = (/'#           ','#           ','radian      ','M_sun       ',&
                                                                     'M_sun       ','M_sun       ','w_o_unit    ','w_o_unit    ',&
                                                                     'kpc         ','w_o_unit    ','Gyr         ','Gyr         ',&
                                                                     'Gyr         ','Gyr         ','Z_sun       ','Z_sun       ',&
-                                                                    'km/s        '/)
+                                                                    'km/s        ','km/s        '/)
   ! Data type of each column data
   character(len=tform_len),dimension(nb_gal_field) :: tform_gal = (/'1J','1J','1E','1E','1E','1E','1E','1E','1E', &
-                                                                    '1E','1E','1E','1E','1E','1E','1E','1E'/)
+                                                                    '1E','1E','1E','1E','1E','1E','1E','1E','1E'/)
   !
   ! printable properties for spectra structures
   integer(kind=4),parameter             :: nb_spec_field = 1
@@ -484,9 +484,7 @@ contains
                 T_ej = gas_temp(ej)
                 ! by using Vesc, Vwind and T_ej we can compute a prediction for f_in
                 Vesc = dm_escape_velocity(dm%r_core,dm)
-                f_in = min(1.d0,max(0.d0,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/T_ej,Vw/), called_by='galaxy_compute_galaxy_feedback_activities')))
-				!if (f_in .lt. 1.d-2) f_in = 0.d0
-                !if (f_in .gt. 9.9d-1) f_in = 1.d0
+                f_in = min(9.99d-1,max(1.d-3,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/T_ej,Vw/), called_by='galaxy_compute_galaxy_feedback_activities')))
             end if
         end if
     end if
@@ -1894,7 +1892,7 @@ contains
         ! 'mu_tot                ','mu_gas                ','R50_stars             ',&
         ! 'disc_bulge_ratio      ','gal_stars_age_MW      ','gal_stars_dage_MW     ',&
         ! 'gal_stars_age_LW      ','gal_stars_dage_LW     ','gal_Z_stars_MW        ',&
-        ! 'gal_Z_stars_LW        ','Vesc                  '
+        ! 'gal_Z_stars_LW        ','gal_Vesc              ','gal_Vwind             '
         !
         ! allocate gal_data array
         allocate(gal_data(nb_gal_field))
@@ -1909,7 +1907,7 @@ contains
                      mass_code_unit_in_M_Sun*gal%accreted_gas_mass, mass_code_unit_in_M_Sun*gal%merger_gas_mass , &
                      mass_code_unit_in_M_Sun*galaxy_mass(gal,component='stars'),gal%mu_tot, gal%mu_gas, gal%R50_stars, dbr, &
                      gal%Stel_Age(1),gal%Stel_dAge(1),gal%Stel_Age(2),gal%Stel_dAge(2),gal%Stel_Z(1)/Z_sun,gal%Stel_Z(2)/Z_sun, &
-                     gal%Vesc/)
+                     gal%Vesc,gal%Vwind/)
         !
     case('lum','luminous','lum_data')
         !

@@ -1123,9 +1123,7 @@ contains
             ! set temperature of ejecta
             call gas_inject_termal_energy(ej,Qt*StellarTimeStep)
             T_ej = gas_temp(ej)
-            f_esc = 1.d0 - min(1.d0,max(0.d0,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/T_ej,Vw/),called_by='disc_compute_disc_feedback_activities')))
-            !if (f_esc .lt. 1.d-2) f_esc = 0.d0
-            !if (f_esc .gt. 9.9d-1) f_esc = 1.d0
+            f_esc = 1.d0 - min(9.99d-1,max(1.d-3,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/T_ej,Vw/),called_by='disc_compute_disc_feedback_activities')))
             ejecta_rate = f_esc*(SN_ej_rate + AGN_ej_rate)
             !
             if (present(Qturb)) then
@@ -1219,7 +1217,8 @@ contains
          real(kind=8)                :: SN_wind_velocity  ! the velocity (in code unit) of the ejecta wind
          real(kind=8)                :: tot_gas
          real(kind=8),parameter      :: ref_mass_concentration = 1.d-2  ! 1Msun/pc3 in code unit
-         real(kind=8),parameter      :: ref_SN_wind_velocity = 1.5d2/vel_code_unit_2_kmPerSec
+         real(kind=8),parameter      :: ref_SN_wind_velocity = 2.5d2/vel_code_unit_2_kmPerSec
+         real(kind=8),parameter      :: min_SN_wind_velocity = 1.d2/vel_code_unit_2_kmPerSec
          real(kind=8)                :: mass_concentration
          real(kind=8)                :: M_unstr, M_str
          real(kind=8)                :: f_unstr
@@ -1244,7 +1243,7 @@ contains
                                  
             !
             scaling = ref_mass_concentration/mass_concentration
-			SN_wind_velocity = ref_SN_wind_velocity*scaling                     
+			SN_wind_velocity = max(min_SN_wind_velocity,ref_SN_wind_velocity*scaling)                     
          else
 			return
          end if 
