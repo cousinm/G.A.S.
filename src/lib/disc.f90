@@ -1217,8 +1217,8 @@ contains
          real(kind=8)                :: SN_wind_velocity  ! the velocity (in code unit) of the ejecta wind
          real(kind=8)                :: tot_gas
          real(kind=8),parameter      :: ref_mass_concentration = 1.d-2  ! 1Msun/pc3 in code unit
-         real(kind=8),parameter      :: ref_SN_wind_velocity = 2.5d2/vel_code_unit_2_kmPerSec
-         real(kind=8),parameter      :: min_SN_wind_velocity = 1.d2/vel_code_unit_2_kmPerSec
+         real(kind=8),parameter      :: ref_SN_wind_velocity = 1.5d2/vel_code_unit_2_kmPerSec
+         real(kind=8),parameter      :: min_SN_wind_velocity = 5.d1/vel_code_unit_2_kmPerSec
          real(kind=8)                :: mass_concentration
          real(kind=8)                :: M_unstr, M_str
          real(kind=8)                :: f_unstr
@@ -1247,8 +1247,6 @@ contains
          else
 			return
          end if 
-         
-         !SN_wind_velocity = 2.d2/vel_code_unit_2_kmPerSec
 
          return
       end function SN_wind_velocity
