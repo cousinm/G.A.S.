@@ -730,7 +730,7 @@ contains
             x = disc%t_cool/t_cool_ts
             if (x .gt. 0.d0) then
                 !
-                gas_str_rate = f_unstr*f_Q*M_unstr*MFF(x)/t_cool_ts
+                gas_str_rate = f_Q*M_unstr*MFF(x)/t_cool_ts
             end if
         end if
         !
@@ -1243,7 +1243,7 @@ contains
                                  
             !
             scaling = ref_mass_concentration/mass_concentration
-			SN_wind_velocity = max(min_SN_wind_velocity,ref_SN_wind_velocity*scaling)                     
+			SN_wind_velocity = max(min_SN_wind_velocity,ref_SN_wind_velocity*sqrt(scaling))                     
          else
 			return
          end if 
@@ -2351,7 +2351,7 @@ contains
         fdisp = 0.d0 ! initially no dissipation
         if (Eturb .gt. 0.d0) then
             ! we assume that a fraction of the turbulent energy is lost during a dissipation timescale
-            t_disp = min(1.d0,Ekin/Eturb)*(racc / Vacc)
+            t_disp = 5.d-1*min(1.d0,Ekin/Eturb)*(racc / Vacc)
             fdisp  = min(1.d0,dt/t_disp)
         end if
         Edisp1 = (1.d0-fdisp)*Eturb
@@ -2361,7 +2361,7 @@ contains
         ! focus only on unstructured gas
         M1 = (1.d0 - accreted_mass%f_str)*M1
         M2 = max(0.d0,disc_mass(disc,component='unstr') - M1)
-        t_disp = disc%t_dyn
+        t_disp = 5.d-1*disc%t_dyn
         fdisp  = min(1.d0,dt/t_disp)
         Edisp2 = (1.d0-fdisp)*5.d-1*M2*disc%dV**2.
         !
