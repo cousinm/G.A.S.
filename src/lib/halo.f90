@@ -90,8 +90,6 @@ module halo
   
   ! OTHER DEFINITIONS *******************
 
-  real(kind=8)              :: halo_dt_min_use       ! minimal time-step used at the halo scale
-
 contains
 
   !*****************************************************************************************************************

@@ -78,8 +78,6 @@ module bulge
     real(kind=8)      :: dV        ! velocity dispersion of the stellar component
   end type bulge_type
 
-  real(kind=8)        :: bulge_dt_min_use ! minimal time-step used at the bulge scale
-
   ! hdu reference for bulge structure
   integer(kind=4)           :: hdu_bulge
   ! printable properties for bulge structure

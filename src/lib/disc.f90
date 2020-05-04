@@ -48,7 +48,7 @@ module disc
   !                  SN_non_kinetic_power            : return the non-kenitic power produced by SN
   !                  SN_thermal_power                : return the thermal power produced by SN
   !                  SN_rad_power                    : return the radiative power produced by SN (residual luminosity)
-  !                  SN_turbulent_heating_power      : return the SN power injected in the gas turbulnet motion
+  !                  SN_turbulent_power      : return the SN power injected in the gas turbulnet motion
   !
   !   disc_update_gas_struct_history                 : update the gas structuration history table associated to a given disc
   !      called by : disc_evolve_II
@@ -139,7 +139,7 @@ module disc
     !
     ! disc properties
     integer(kind=4)     :: nlevels             ! number of gas structuration levels (-1 if no gas structuration)
-    integer(kind=4)     :: ngc                 ! number of giant clouds
+    real(kind=8)        :: ngc                 ! number of giant clouds
     real(kind=8)        :: f_str               ! fraction of structured/fragmented gas in the disc
     real(kind=8)        :: rd                  ! the disc has an exponential profile and its size is described by the exp radius, in [kpc]
     real(kind=8)        :: h                   ! scale height of the disc, in [kpc]
@@ -165,9 +165,7 @@ module disc
     type(gas_type)      :: disrupt_rate        ! gas disruption rate, transfer from the fragmented non star formaing and star-forming gas to the diffuse gas
     type(gas_type)      :: ejecta_rate         ! ejecta rate of the disc (large scale wind generated from SN + AGN)
   end type disc_type
-
-  real(kind=8)          :: disc_dt_min_use                          ! minimal time-step used at the disc scale
-
+  
   ! hdu reference for disc structure
   integer(kind=4)           :: hdu_disc
   ! printable properties for disc structure
@@ -346,7 +344,7 @@ contains
     call agn_void(disc%agn)                               ! void the agn component
     !
     ! disc properties
-    disc%ngc               = 0
+    disc%ngc               = 0.d0
     disc%f_str             = -1.d0                        ! all other fields are set to null value
     disc%rd                = -1.d0
     disc%h                 = -1.d0
@@ -442,7 +440,7 @@ contains
 
     character(MAXPATHSIZE)         :: message                   ! a message to display
 
-	real(kind=8),intent(in)        :: r50                       ! galaxy half mass radius
+    real(kind=8),intent(in)        :: r50                       ! galaxy half mass radius
     real(kind=8)                   :: Vesc                      ! galaxy escape velocity
     real(kind=8),intent(out)       :: dt_optim                  ! optimal time-step for the disc evolution scheme
     real(kind=8)                   :: dt_agn                    ! optimal timestep for the agn component
@@ -464,7 +462,7 @@ contains
     type(gas_type)                 :: disrupt_rate              ! disrupting rate (from the fragmented to the diffuse gas phases)
 
     type(dm_type),intent(in)       :: dm                        ! a dark matter component
-	type(bulge_type),intent(in)    :: bulge                     ! a bulge component
+    type(bulge_type),intent(in)    :: bulge                     ! a bulge component
     type(disc_type),intent(inout)  :: disc                      ! a disc component
 
 #ifdef PRINTALL
@@ -743,43 +741,6 @@ contains
     end function gas_str_rate
 
     ! *************************************************
-
-    function disrupt_str_gas_rate(disc,Qturb,Qturb_unstr)
-
-        ! COMPUTE THE DISRUPTION RATE OF THE STRUCTURED/FRAGMENTED GAS ASSOCIATED TO SN+AGN KINETIC INJECTION ENERGY
-
-        implicit none
-
-        real(kind=8),intent(in)            :: Qturb                ! turbulent power, injected by SN and AGN
-        real(kind=8),intent(out),optional  :: Qturb_unstr          ! the residual turbulent power, then injected in the diffuse gas
-        real(kind=8)                       :: disrupt_str_gas_rate ! the disruption rate of the structured/frgamented gas
-        real(kind=8)                       :: f_str                ! the structured/frgamented mass fraction
-
-        type(disc_type),intent(in)         :: disc                 ! the disc component
-
-        disrupt_str_gas_rate = 0.d0  ! init
-        if (present(Qturb_unstr)) Qturb_unstr = 0.d0  ! init
-
-        f_str = disc_gas_fraction(disc,component='structured')
-
-        if (Qturb .gt. 0.d0) then
-            !
-            ! Some turbulent energy is injected into the dense/fragmented gas
-            disrupt_str_gas_rate = min(1.d5,2.d0*f_str*Qturb/disc%dV**2.)
-            !
-            if (present(Qturb_unstr)) then
-                !
-                ! In input Qturb is the full turbulent power
-                ! If asked, in output Qturb_unstr saves the turbulent power
-                ! that will be injected into the diffuse/unstructured gas phase
-                Qturb_unstr = (1.d0-f_str)*Qturb
-            end if
-        end if
-
-        return
-    end function disrupt_str_gas_rate
-
-    ! *************************************************
     ! end contains disc_evolve_I
 
   end subroutine disc_evolve_I
@@ -958,9 +919,9 @@ contains
       ! build the complete gas object
       gas = disc_mass(disc,component='str')*disc_gas_signature(disc,component='str')
       ! Scale the gas component to a BC mass
-      if (disc%ngc .gt. 0) then
+      if (disc%ngc .gt. 0.d0) then
         !
-        gas = min(gas_mass(gas),Bonnor_Ebert_Mass(1.d0/disc%h))*gas_signature(gas)
+        gas = (1.d0/disc%ngc)*gas
         if (gas_mass(gas) > 0.d0) then
             !
             ! We compute here the effective extinction associated to 1 GMC
@@ -993,7 +954,7 @@ contains
 
   !*****************************************************************************************************************
 
-  subroutine disc_compute_disc_feedback_activities(disc,Vesc,ejecta_rate,agn_acc_rate,Vwind,Qtherm,Qturb,Qrad)
+  subroutine disc_compute_disc_feedback_activities(disc,Vesc,ejecta_rate,agn_acc_rate,Vwind,Qtherm,Qturb_unstr,Qrad)
 
     ! COMPUTE ALL PROPERTIES LINKED TO FEEDBACK PROCESSES INTO THE DISC STRUCTURE
     ! - the global gas ejection rate,
@@ -1008,7 +969,7 @@ contains
     real(kind=8),intent(out),optional :: agn_acc_rate     ! the real accretion rate onto the SMBH
     real(kind=8),intent(out),optional :: Vwind            ! the rate-weighted velocity of the wind produced by feedback processes
     real(kind=8),intent(out),optional :: Qtherm           ! thermal power (allow to compute mean wind temperature)
-    real(kind=8),intent(out),optional :: Qturb            ! turbulent heating power
+    real(kind=8),intent(out),optional :: Qturb_unstr      ! turbulent power injected into the diffuse/unstructured gas phase
     real(kind=8),intent(out),optional :: Qrad             ! non kinetic and non-thermal power
     real(kind=8)                      :: SN_ej_rate       ! ejecta rate produced by SN explosions
     real(kind=8)                      :: AGN_ej_rate      ! ejecta rate produced by the SMBH activity
@@ -1102,7 +1063,7 @@ contains
     !
     ! compute the instantaneous turbulent heating power
     ! from SN
-    Qturb_SN  = SN_turbulent_heating_power(disc)
+    Qturb_SN  = SN_turbulent_power(disc)
     ! from AGN
     Qturb_AGN = agn_compute_AGN_turbulent_heating_power(disc%agn)
     if (present(Qturb)) then
@@ -1121,10 +1082,15 @@ contains
          ej = ejecta_rate*StellarTimeStep*disc_gas_signature(disc,apply_as='rate_builder')
          if (gas_mass(ej) .gt. M_gas_null) then
             ! set temperature of ejecta
-            call gas_inject_termal_energy(ej,Qt*StellarTimeStep)
+            call gas_inject_thermal_energy(ej,Qt*StellarTimeStep)
             T_ej = gas_temp(ej)
-            f_esc = 1.d0 - min(9.99d-1,max(1.d-3,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/T_ej,Vw/),called_by='disc_compute_disc_feedback_activities')))
+            if (T_ej .gt. 1.e9) then
+				call IO_print_warning_message('Very hot ejecta',only_rank=rank,called_by='disc_compute_disc_feedback_activities')
+            end if
+            f_esc = 1.d0 - min(9.99999d-1,max(1.d-6,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/T_ej,Vw/),called_by='disc_compute_disc_feedback_activities')))
+            !write(*,*) ' > Vesc, Vwind, f_esc, T_ej, ejecta_rate: ', Vesc, Vw, f_esc, T_ej, ejecta_rate
             ejecta_rate = f_esc*(SN_ej_rate + AGN_ej_rate)
+            !write(*,*) '   > ejecta_rate: ', ejecta_rate
             !
             if (present(Qturb)) then
                 !
@@ -1133,7 +1099,7 @@ contains
             end if
          else
             ! too few ejected mass 
-			ejecta_rate = 0.d0
+            ejecta_rate = 0.d0
          end if
        end if
     end if
@@ -1141,16 +1107,52 @@ contains
     return
 
     contains
+    
+    ! *************************************************
+
+    function SN_disrupt_str_gas_rate(disc,Qturb_unstr)
+
+        ! COMPUTE THE DISRUPTION RATE OF THE STRUCTURED/FRAGMENTED GAS ASSOCIATED TO SN KINETIC INJECTION ENERGY
+
+        implicit none
+
+        real(kind=8)                       :: Qturb                   ! turbulent power, injected by SN and AGN
+        real(kind=8),intent(out),optional  :: Qturb_unstr             ! the residual turbulent power, then injected in the diffuse gas
+        real(kind=8)                       :: SN_disrupt_str_gas_rate ! the disruption rate of the structured/frgamented gas
+        real(kind=8)                       :: f_str                   ! the fraction of fragmented/structured gas
+
+        type(disc_type),intent(in)         :: disc                    ! the disc component
+
+        SN_disrupt_str_gas_rate = 0.d0  ! init
+        if (present(Qturb_unstr)) Qturb_unstr = 0.d0  ! init
+        
+        f_str = disc_gas_fraction(disc, component='structured')
+        !
+        Qturb = SN_turbulent_power(disc)
+        if (Qturb .gt. 0.d0) then
+           !
+           ! Some turbulent energy is injected into the dense/fragmented gas
+           SN_disrupt_str_gas_rate = 2.d0*f_str*Qturb/disc%dV**2.
+           !
+           if (present(Qturb_unstr)) then
+              !
+              ! In input Qturb is the full turbulent power
+              ! If asked, in output Qturb_unstr saves the turbulent power
+              ! that will be injected into the diffuse/unstructured gas phase
+              Qturb_unstr = (1.d0-f_str)*Qturb
+            end if
+        end if
+        return
+    end function SN_disrupt_str_gas_rate
 
     ! *************************************************
 
-    function SN_ejecta_rate(disc, Vesc)
+    function SN_ejecta_rate(disc)
 
         ! COMPUTE EJECTA RATE OF THE DISC COMPONENT
 
         implicit none
 
-		real(kind=8), intent(in)   :: Vesc    ! galaxy escpae velocity
         real(kind=8)               :: tot_gas ! the total gas mass in the disc
         real(kind=8)               :: Vwind   ! wind velocity
         real(kind=8)               :: eta_sn  ! SN event rate
@@ -1161,18 +1163,14 @@ contains
         SN_ejecta_rate = 0.d0 ! init
 
         tot_gas = disc_mass(disc,component='gas')
-
-        if (disc_ejecta_efficiency .le. 0.d0) return  ! no ejecta takes into account
         !
         ! compute wind velocity 
         Vwind = SN_wind_velocity(disc)  ! in km/s
         !
         if (Vwind .le. 0.d0) return
         !
-        eta_sn = disc%stars%SN_rate
-        ! Energy driven
         ! in code unit 10^11 Msun / Gyr
-        SN_ejecta_rate = 2.d0*disc_ejecta_efficiency*eta_sn*SN_kinetic_fraction*Esn_code_unit/Vwind**2
+        SN_ejecta_rate = 2.d0*SN_ejecta_power(disc)/Vwind**2
         !
         ! Check the result and crash the code if:
         ! disc_compute_disc_SN_ejecta_rate is NAN
@@ -1216,10 +1214,10 @@ contains
 
          real(kind=8)                :: SN_wind_velocity  ! the velocity (in code unit) of the ejecta wind
          real(kind=8)                :: tot_gas
-         real(kind=8),parameter      :: ref_mass_concentration = 1.d-2  ! 1Msun/pc3 in code unit
-         real(kind=8),parameter      :: ref_SN_wind_velocity = 1.5d2/vel_code_unit_2_kmPerSec
+         real(kind=8),parameter      :: ref_SN_wind_velocity = 2.d2/vel_code_unit_2_kmPerSec
          real(kind=8),parameter      :: min_SN_wind_velocity = 5.d1/vel_code_unit_2_kmPerSec
-         real(kind=8)                :: mass_concentration
+		 real(kind=8),parameter      :: rho_crit = 1.d-2    ! 1Msun/pc**3. ! critical gas density
+         real(kind=8)                :: rho_eff
          real(kind=8)                :: M_unstr, M_str
          real(kind=8)                :: f_unstr
          real(kind=8)                :: scaling
@@ -1233,19 +1231,18 @@ contains
          tot_gas = disc_mass(disc, component='gas')
          
          if ((disc%h .gt. 0.d0) .and. (tot_gas .gt. 0.d0)) then
-			!
-			! Evaluate the effective mass concentration
-			M_unstr = disc_mass(disc, component='unstructured')
-			M_str = disc_mass(disc, component='structured')
-			f_unstr = disc_gas_fraction(disc, component='unstructured')
-			mass_concentration = f_unstr*5.d-1*M_unstr / (pi*(1.68d0*disc%rd)**2.*disc%h) & ! diffuse gas
-                                 + (1.d0-f_unstr)*M_str / (real(max(1,disc%ngc),kind=8)*(4.d0/3.d0*pi*(disc%h/2.d0)**3.)) ! fragmented gas
-                                 
             !
-            scaling = ref_mass_concentration/mass_concentration
-			SN_wind_velocity = max(min_SN_wind_velocity,ref_SN_wind_velocity*sqrt(scaling))                     
+            ! Evaluate the effective mass concentration
+            M_unstr = disc_mass(disc, component='unstructured')
+            M_str = disc_mass(disc, component='structured')
+            f_unstr = disc_gas_fraction(disc, component='unstructured')
+            rho_eff = f_unstr*5.d-1*M_unstr / (pi*(1.68d0*disc%rd)**2.*disc%h) & ! diffuse gas
+                      + (1.d0-f_unstr)*M_str / (max(1.d0,disc%ngc)*(4.d0/3.d0*pi*(disc%h/2.d0)**3.)) ! fragmented gas                 
+            !
+            scaling = rho_crit/rho_eff
+            SN_wind_velocity = max(min_SN_wind_velocity,ref_SN_wind_velocity*sqrt(scaling))                     
          else
-			return
+            return
          end if 
 
          return
@@ -1307,29 +1304,53 @@ contains
         return
       end function SN_rad_power
 
+	  ! *************************************************
+
+      function SN_ejecta_power(disc)
+
+        ! COMPUTE THE INSTANTANEOUS KINETIC POWER INJECTED IN THE EJECTED GAS 
+
+        implicit none
+
+        real(kind=8)               :: eta_sn           ! SN event rate
+        real(kind=8)               :: SN_ejecta_power  ! in code unit (10^11.Msun.Mpc^2/Gyr^3)
+
+        type(disc_type),intent(in) :: disc  ! the disc component
+
+        SN_ejecta_power = 0.d0  ! init
+
+        if (disc_ejecta_efficiency .le. 0.d0) return  ! no ejecta takes into account
+
+        eta_sn = disc%stars%SN_rate
+        SN_ejecta_power = &     ! in code unit (10^11.Msun.kpc^2/Gyr^3)
+              disc_ejecta_efficiency*eta_sn*SN_kinetic_fraction*Esn_code_unit
+
+        return
+      end function SN_ejecta_power
+
       ! *************************************************
 
-      function SN_turbulent_heating_power(disc)
+      function SN_turbulent_power(disc)
 
         ! COMPUTE THE TOTAL INSTANTANEOUS KINETIC POWER INJECTED IN THE TUBULENT GAS MOTION
 
         implicit none
 
         real(kind=8)               :: eta_sn                      ! SN event rate
-        real(kind=8)               :: SN_turbulent_heating_power  ! in code unit (10^11.Msun.Mpc^2/Gyr^3)
+        real(kind=8)               :: SN_turbulent_power  ! in code unit (10^11.Msun.Mpc^2/Gyr^3)
 
         type(disc_type),intent(in) :: disc  ! the disc component
 
-        SN_turbulent_heating_power = 0.d0  ! init
+        SN_turbulent_power = 0.d0  ! init
 
         if (disc_ejecta_efficiency .le. 0.d0) return  ! no ejecta takes into account
 
         eta_sn = disc%stars%SN_rate
-        SN_turbulent_heating_power = &     ! in code unit (10^11.Msun.kpc^2/Gyr^3)
+        SN_turbulent_power = &     ! in code unit (10^11.Msun.kpc^2/Gyr^3)
               (1.d0-disc_ejecta_efficiency)*eta_sn*SN_kinetic_fraction*Esn_code_unit
 
         return
-      end function SN_turbulent_heating_power
+      end function SN_turbulent_power
 
       ! *************************************************
       ! end contains disc_compute_disc_feedback_activities
@@ -1512,6 +1533,7 @@ contains
     real(kind=8)                        :: t_form          ! instantaneous formation timescale
     real(kind=8)                        :: t_eq            ! instantaneous equilibrium timescale
     real(kind=8)                        :: t_prod          ! instantaneous production timescale
+    real(kind=8)                        :: ngc             ! instantaneous number of clumps
 
     if ((present(disc1) .and. present(disc2))) then
         !
@@ -1536,18 +1558,18 @@ contains
           !
           MBE1 = min(M1, Bonnor_Ebert_Mass(1./disc1%h))
           MBE2 = min(M2, Bonnor_Ebert_Mass(1./disc2%h))
-          disc%ngc = 0
+          disc%ngc = 0.d0
           if ((disc%h > 0.d0) .and. ((MBE1 + MBE2) > 0.)) then
-             disc%ngc = max(1,int((MBE1*float(disc1%ngc) + MBE2*float(disc2%ngc)) / (MBE1 + MBE2)))
+             disc%ngc = max(1.d0,(MBE1*disc1%ngc + MBE2*disc2%ngc) / (MBE1 + MBE2))
           end if
        else
-			! Reset clock and timescales
-			disc%gsh_tab%t_cascade = 0.d0
-			disc%gsh_tab%t_eq      = t_eq_max
-			disc%gsh_tab%t_form    = 9.9d-1*t_eq_max
-			disc%gsh_tab%t_emp     = t_str_max
-			disc%gsh_tab%t_prod    = 9.9d-1*t_str_max
-			disc%ngc = 0
+            ! Reset clock and timescales
+            disc%gsh_tab%t_cascade = 0.d0
+            disc%gsh_tab%t_eq      = t_eq_max
+            disc%gsh_tab%t_form    = 9.9d-1*t_eq_max
+            disc%gsh_tab%t_emp     = t_str_max
+            disc%gsh_tab%t_prod    = 9.9d-1*t_str_max
+            disc%ngc = 0
         end if
     else
         !
@@ -1581,25 +1603,25 @@ contains
           !
           ! update the number of giant birth clouds
           if (disc%h > 0.d0) then
-             MBE1 = min(M1, Saturation_Mass(1./disc%h, disc%str_rate))
-             disc%ngc = int(max(1,ceiling(MBE1/Bonnor_Ebert_Mass(1./disc%h))))
+             ngc = min(M1, Saturation_Mass(1./disc%h, disc%str_rate))/Bonnor_Ebert_Mass(1./disc%h)
+             disc%ngc = (max(0.d0,M1-M2)*disc%ngc + M2*ngc)/M1
           end if
         else
-			! Reset clock and timescales
-			disc%gsh_tab%t_cascade = 0.d0
-			disc%gsh_tab%t_eq      = t_eq_max
-			disc%gsh_tab%t_form    = 9.9d-1*t_eq_max
-			disc%gsh_tab%t_emp     = t_str_max
-			disc%gsh_tab%t_prod    = 9.9d-1*t_str_max
-			disc%ngc = 0
+            ! Reset clock and timescales
+            disc%gsh_tab%t_cascade = 0.d0
+            disc%gsh_tab%t_eq      = t_eq_max
+            disc%gsh_tab%t_form    = 9.9d-1*t_eq_max
+            disc%gsh_tab%t_emp     = t_str_max
+            disc%gsh_tab%t_prod    = 9.9d-1*t_str_max
+            disc%ngc = 0
         end if
     end if
 
-	! Check NaN Values
-	if (is_NaN(disc%gsh_tab%t_cascade) .or. is_NaN(disc%gsh_tab%t_eq) .or. \
-	    is_NaN(disc%gsh_tab%t_emp) .or. is_NaN(disc%gsh_tab%t_prod) .or. \
-	    is_NaN(disc%gsh_tab%t_form)) then
-		!
+    ! Check NaN Values
+    if (is_NaN(disc%gsh_tab%t_cascade) .or. is_NaN(disc%gsh_tab%t_eq) .or. \
+        is_NaN(disc%gsh_tab%t_emp) .or. is_NaN(disc%gsh_tab%t_prod) .or. \
+        is_NaN(disc%gsh_tab%t_form)) then
+        !
         call IO_print_error_message('gas timescale(s) is(are) NAN',only_rank=rank,called_by='disc_update_inertial_cascade')
         call IO_print_message('used',only_rank=rank,component='disc',& 
         param_name=(/'t_cascade                ','t_eq                     ','t_emp                    ',&
@@ -1608,7 +1630,7 @@ contains
         real_param_val =(/disc%gsh_tab%t_cascade,disc%gsh_tab%t_eq,disc%gsh_tab%t_emp, \
                           disc%gsh_tab%t_prod,disc%gsh_tab%t_form,M1,M2,disc%h/))
         stop ! stop the program
-	endif
+    endif
 
     return
   end subroutine disc_update_inertial_cascade
@@ -1723,7 +1745,8 @@ contains
     disc_SFR = 0.d0 ! init
     M_str = disc_mass(disc, component='str')
 
-    if ((M_str .gt. 0.d0) .and. (disc%gsh_tab%t_cascade .gt. 0.d0) .and. (disc%h .gt. 0.d0) .and. (disc%ngc .gt. 0)) then
+    if ((M_str .gt. 0.d0) .and. (disc%h .gt. 0.d0) .and. &
+        ((disc%ngc .ge. 1.d0) .or. (disc%gsh_tab%t_cascade .gt. disc%gsh_tab%t_form))) then
         !
         ! The fragmented NON star-forming gas is converted in fragmented star-forming gas
         if (disc%gsh_tab%t_cascade .gt. disc%gsh_tab%t_eq) then
@@ -1731,9 +1754,14 @@ contains
            dt = disc%gsh_tab%t_prod
         else
            if (disc%gsh_tab%t_prod .lt. disc%gsh_tab%t_emp) then
-              a = (disc%gsh_tab%t_prod - disc%gsh_tab%t_emp) / (disc%gsh_tab%t_eq - disc%gsh_tab%t_form)
-              b = disc%gsh_tab%t_emp - a * disc%gsh_tab%t_form
-              dt = a * disc%gsh_tab%t_cascade + b
+              ! linear model 
+              !a = (disc%gsh_tab%t_prod - disc%gsh_tab%t_emp) / (disc%gsh_tab%t_eq - disc%gsh_tab%t_form)
+              !b = disc%gsh_tab%t_emp - a * disc%gsh_tab%t_form
+              !dt = a * disc%gsh_tab%t_cascade + b
+              ! exponential model
+              a = disc%gsh_tab%t_emp
+              b = -(disc%gsh_tab%t_eq - disc%gsh_tab%t_form) / log(disc%gsh_tab%t_prod / disc%gsh_tab%t_emp)
+              dt = a*exp(-(disc%gsh_tab%t_cascade - disc%gsh_tab%t_form)/b)
            else
               dt = disc%gsh_tab%t_prod
            end if
@@ -1742,7 +1770,7 @@ contains
            disc_SFR = min(M_str, Bonnor_Ebert_Mass(1.d0/disc%h)) / dt
         else
            !
-		   call IO_print_error_message('dt < 0',only_rank=rank,called_by='disc_SFR')
+           call IO_print_error_message('dt < 0',only_rank=rank,called_by='disc_SFR')
            call IO_print_message('used',only_rank=rank,component='disc',& 
            param_name=(/'t_cascade                ','t_eq                     ','t_emp                    ',&
                         't_prod                   ','t_form                   ','M_str                    ',& 
@@ -2054,7 +2082,7 @@ contains
     type(disc_type),intent(inout) :: disc                           ! a disc component
 
     ! We simply inverse the larson velocity dispersion relation
-    disc_scale_height = l_star*(sig_star/disc%dV)**(-1./larson_sig_slope) ! [code unit]
+    disc_scale_height = l_star*(sig_star/(disc%dV/sqrt(3.d0)))**(-1./larson_sig_slope) ! [code unit]
 
     return
   end function disc_scale_height
@@ -2063,12 +2091,12 @@ contains
   
   function disc_escape_velocity(disc,bulge,dm,r50)
   
-	! RETURN THE ESCAPE VELOCITY OF THE DISC
-	
-	real(kind=8),intent(in)       :: r50     ! galaxy half mass radius (including dark-matter)
-	real(kind=8)                  :: r_esc   ! radius of escape velocity computation
-	
-	type(disc_type),intent(in)    :: disc    ! the disc component
+    ! RETURN THE ESCAPE VELOCITY OF THE DISC
+    
+    real(kind=8),intent(in)       :: r50     ! galaxy half mass radius (including dark-matter)
+    real(kind=8)                  :: r_esc   ! radius of escape velocity computation
+    
+    type(disc_type),intent(in)    :: disc    ! the disc component
     type(bulge_type),intent(in)   :: bulge   ! the bulge component
     type(dm_type),intent(in)      :: dm      ! the dark matter halo component
      
@@ -2077,7 +2105,7 @@ contains
     disc_escape_velocity = -1.d0
     
     if (r_esc .gt. 0.d0) then 
-		disc_escape_velocity = sqrt(2.d0*gravconst_code_unit*( &
+        disc_escape_velocity = sqrt(2.d0*gravconst_code_unit*( &
                                     disc_mass(disc,r=r_esc) + &
                                     bulge_mass(bulge,r=r_esc) + &
                                     dm_mass(dm,r=r_esc))/r_esc)
@@ -2085,7 +2113,7 @@ contains
     
     return
   end function disc_escape_velocity  
-   	
+    
   !*****************************************************************************************************************
   
   function disc_mass_weighted_orbital_velocity(disc,dm,bulge)
@@ -2314,7 +2342,7 @@ contains
 
      implicit none
 
-	 real(kind=8),intent(in)              :: Vesc ! The galaxy escape velocity 
+     real(kind=8),intent(in)              :: Vesc ! The galaxy escape velocity 
      real(kind=8),intent(in),optional     :: dt
      real(kind=8)                         :: disc_update_velocity_dispersion
      real(kind=8)                         :: M1, M2
@@ -2351,7 +2379,7 @@ contains
         fdisp = 0.d0 ! initially no dissipation
         if (Eturb .gt. 0.d0) then
             ! we assume that a fraction of the turbulent energy is lost during a dissipation timescale
-            t_disp = 5.d-1*min(1.d0,Ekin/Eturb)*(racc / Vacc)
+            t_disp = min(1.d0,Ekin/Eturb)*(racc / Vacc)
             fdisp  = min(1.d0,dt/t_disp)
         end if
         Edisp1 = (1.d0-fdisp)*Eturb
@@ -2361,7 +2389,7 @@ contains
         ! focus only on unstructured gas
         M1 = (1.d0 - accreted_mass%f_str)*M1
         M2 = max(0.d0,disc_mass(disc,component='unstr') - M1)
-        t_disp = 5.d-1*disc%t_dyn
+        t_disp = disc%t_dyn
         fdisp  = min(1.d0,dt/t_disp)
         Edisp2 = (1.d0-fdisp)*5.d-1*M2*disc%dV**2.
         !
@@ -2488,11 +2516,11 @@ contains
 
      disc_Toomre_parameter = 1.d0  ! init
 
-     Mgas = disc_mass(disc,r=2.d0*1.68d0*disc%rd,component='unstructured')
+     Mgas = disc_mass(disc,component='unstructured')
 
      if (Mgas .le. 0.d0) return  ! no disc
 
-     Sigma = Mgas/(pi*(2.d0*1.68d0*disc%rd)**2.)
+     Sigma = 5.d-1*Mgas/(pi*(1.68d0*disc%rd)**2.)
 
      disc_Toomre_parameter = disc%kappa*disc%dV/sqrt(3.d0)/(pi*gravconst_code_unit*Sigma)
 
@@ -2655,7 +2683,7 @@ contains
                   gas_mass(str_gas,component='O16'), &
                   gas_mass(str_gas,component='Fe56'), &
                   OH_str, &
-                  disc%f_str, real(disc%ngc,kind=8), disc%rd, disc%h, &
+                  disc%f_str, disc%ngc, disc%rd, disc%h, &
                   disc%V*vel_code_unit_2_kmPerSec, &
                   disc%dV*vel_code_unit_2_kmPerSec, &
                   disc%Q, disc%cooling_timescale, disc%t_dyn, disc%t_cool, &

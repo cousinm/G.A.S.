@@ -1982,11 +1982,6 @@ contains
     call IO_print_message('tree_evolve',only_rank=rank,component='tree')
 ! -------------------------------------------------
 #endif
-    
-    halo_dt_min_use  = StellarTimeStep                                      ! init
-    disc_dt_min_use  = StellarTimeStep                                      ! init
-    bulge_dt_min_use = StellarTimeStep                                      ! init
-    dt_min_use = min(halo_dt_min_use,min(disc_dt_min_use,bulge_dt_min_use)) ! init
     ! 
     ! ********************************
     ! SELECT CURRENT FOLLOWED HALOS

@@ -1711,7 +1711,7 @@ contains
         call gas_add(bh1%hot_gas,bh2%hot_gas)   
         ! inject thermal energy due to the merger
         Eint = gravconst_code_unit*(Mhot_1*Mhot_2)/dm1%R_vir
-        call gas_inject_termal_energy(bh1%hot_gas,Eint)
+        call gas_inject_thermal_energy(bh1%hot_gas,Eint)
         !
         ! update cooling clock
         if (M_hot .gt. 0.d0) then 

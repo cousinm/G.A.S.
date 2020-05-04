@@ -54,7 +54,7 @@ module gas
   !
   !  gas_sub_array                     : Substract an array of gas components to an other one
   !
-  !  gas_inject_termal_energy          : Inject thermal internal energy into a given gas phase, and set/update the Temperature
+  !  gas_inject_thermal_energy          : Inject thermal internal energy into a given gas phase, and set/update the Temperature
   !
   !  gas_evap                          : Compute the gas evaporation according to the temperature and an escape velocity
   !
@@ -780,7 +780,7 @@ contains
         !
         if (Tw .gt. 0.d0) then
             ! fraction of gas in the wind which is kept into the halo
-            f_in = min(9.99d-1,max(1.d-3,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/Tw,Vwind/),called_by='gas_add / f_in')))
+            f_in = min(9.99999d-1,max(1.d-6,Ronbint(Maxwell_Boltzman_Vdist_shifted,0.d0,Vesc,(/Tw,Vwind/),called_by='gas_add / f_in')))
             !
             if ((f_in .gt. 0.d0) .and. (f_in .le. 1.d0)) then
                ! A fraction of the wind is catched by the hot atmosphere
@@ -1100,7 +1100,7 @@ contains
 
   !*****************************************************************************************************************
 
-  subroutine gas_inject_termal_energy(g,Qtherm)
+  subroutine gas_inject_thermal_energy(g,Qtherm)
 
     ! INJECT A THEMAL ENERGY (Qtherm) TO THE GAS (SET/UPDATE THE TEMPERATURE)
 
@@ -1127,12 +1127,12 @@ contains
     call gas_set_component(g,T,component='Temp')
 
     if (is_NaN(g%Temp)) then
-        call IO_print_error_message('T is NaN ',only_rank=rank,called_by='gas_inject_termal_energy')
+        call IO_print_error_message('T is NaN ',only_rank=rank,called_by='gas_inject_thermal_energy')
         stop ! stop the program
     end if
 
     return
-  end subroutine gas_inject_termal_energy
+  end subroutine gas_inject_thermal_energy
 
   !*****************************************************************************************************************
 
