@@ -4,7 +4,7 @@ module utilities
   use IO                ! Input/Output definitions, display procedures and reading procedures for input files
 
   !*****************************************************************************************************************
-  ! 
+  !
   ! OVERVIEW
   !
   ! General purpose (e.g. interpolation) routines used by (but not specifically related to) the G.A.S model
@@ -15,8 +15,8 @@ module utilities
   !
   ! dt2dz                            :: compute redshift interval corresponding to a time interval at a given redshift
   !
-  ! is_NaN                           :: Allows to test if a number is not defined correctly (Not a Number) 
-  !                                     Return .true. if x is not a number  
+  ! is_NaN                           :: Allows to test if a number is not defined correctly (Not a Number)
+  !                                     Return .true. if x is not a number
   !
   ! BESSI0                           :: "I" Bessel function of rank 0
   !
@@ -24,7 +24,7 @@ module utilities
   !
   ! BESSK0                           :: "K" Bessel function of rank 0
   !
-  ! BESSK1                           :: "K" Bessel function of rank 1 
+  ! BESSK1                           :: "K" Bessel function of rank 1
   !
   ! slope_limiter(x,x0)              :: Reduce the evolution rate of a given properties (x)
   !                                        allows to slowly approach the resolution limit (x0)
@@ -43,41 +43,41 @@ module utilities
   !*****************************************************************************************************************
 
   contains
-  
+
   !***********************************************************************************************************
-  
+
   function dt2dz(dt,z)
 
     ! COMPUTE THE 'dz' KNOWING THE 'dt'
     ! at a given z
-        
+
     implicit none
-        
+
     real(kind=8),intent(in)      :: dt, z   ! in Gyr and without unit
     real(kind=8)                 :: dt2dz   ! without unit
-        
+
     dt2dz = (Omega_m*z+1.d0)*(1.d0+z)**2. - Omega_L*z*(z+2.d0)
     dt2dz = -1.d2*h_0_code_unit*(1.d0+z)*sqrt(dt2dz)*dt
-        
+
     return
   end function dt2dz
 
   !***********************************************************************************************************
 
   function is_NaN(x)
-    
-    ! Return .true. if x is not a number 
+
+    ! Return .true. if x is not a number
 
     implicit none
 
     logical         :: is_NaN ! is true if
-    
-    real(kind=8)    :: x      ! is not a number 
+
+    real(kind=8)    :: x      ! is not a number
 
     if (x == x) then
       !
       is_NaN = .false.
-    else  
+    else
       !
       is_NaN = .true.
     endif
@@ -89,11 +89,11 @@ module utilities
   !*************************************************************************************************************
 
   pure function BESSI0(X)
-   
+
     ! "I" Bessel function of rank 0
-    
+
     implicit none
-    
+
     real(kind=8),intent(in) :: X
     real(kind=8)            :: BESSI0,Y,AX,BX
     real(kind=8),parameter  :: P1 = 1.d0
@@ -125,19 +125,19 @@ module utilities
       AX=Q1+Y*(Q2+Y*(Q3+Y*(Q4+Y*(Q5+Y*(Q6+Y*(Q7+Y*(Q8+Y*Q9)))))))
       BESSI0=AX*BX
     endif
-    
+
     return
 
   end function BESSI0
-  
+
   !*****************************************************************************************************************
-  
+
   pure function BESSI1(X)
-  
+
     ! "I" Bessel function of rank 1
-    
+
     implicit none
-    
+
     real(kind=8), intent(in)  :: X
     real(kind=8)              :: BESSI1,Y,AX,BX
     real(kind=8),parameter    :: P1 = 0.5d0
@@ -156,7 +156,7 @@ module utilities
     real(kind=8),parameter    :: Q7 = -0.2895312d-1
     real(kind=8),parameter    :: Q8 = 0.1787654d-1
     real(kind=8),parameter    :: Q9 = -0.420059d-2
-    
+
     if(abs(X) .lt. 3.75D0) then
       !
       Y=(X/3.75D0)**2
@@ -169,19 +169,19 @@ module utilities
       AX=Q1+Y*(Q2+Y*(Q3+Y*(Q4+Y*(Q5+Y*(Q6+Y*(Q7+Y*(Q8+Y*Q9)))))))
       BESSI1=AX*BX
     endif
-    
+
     return
 
   end function BESSI1
-  
+
   !*****************************************************************************************************************
-  
+
   pure function BESSK0(X)
-  
+
     ! "K" Bessel function of rank 0
-    
+
     implicit none
-    
+
     real(kind=8), intent(in)  :: X
     real(kind=8)              :: BESSK0,Y,AX
     real(kind=8),parameter    :: P1 = -0.57721566d0
@@ -204,7 +204,7 @@ module utilities
       BESSK0=1.D30
       return
     endif
-    
+
     if(X .le. 2.D0) then
       !
       Y=X*X/4.D0
@@ -216,19 +216,19 @@ module utilities
       AX=exp(-X)/sqrt(X)
       BESSK0=AX*(Q1+Y*(Q2+Y*(Q3+Y*(Q4+Y*(Q5+Y*(Q6+Y*Q7))))))
     endif
-    
+
     return
 
   end function BESSK0
-  
+
   !*****************************************************************************************************************
-  
+
   pure function BESSK1(X)
-  
+
     ! "K" Bessel function of rank 1
-    
+
     implicit none
-    
+
     real(kind=8),intent(in)  :: X
     real(kind=8)             :: BESSK1,Y,AX
     real(kind=8),parameter   :: P1 = 1.d0
@@ -245,13 +245,13 @@ module utilities
     real(kind=8),parameter   :: Q5 = -0.780353d-2
     real(kind=8),parameter   :: Q6 = 0.325614d-2
     real(kind=8),parameter   :: Q7 = -0.68245d-3
-   
+
     if(X .eq. 0.D0) then
       !
       BESSK1=1.D32
       return
     endif
-    
+
     if(X .le. 2.D0) then
       !
       Y=X*X/4.D0
@@ -263,49 +263,49 @@ module utilities
       AX=exp(-X)/sqrt(X)
       BESSK1=AX*(Q1+Y*(Q2+Y*(Q3+Y*(Q4+Y*(Q5+Y*(Q6+Y*Q7))))))
     endif
-    
+
     return
 
   end function BESSK1
-  
+
   !*****************************************************************************************************************
-  
+
   function slope_limiter(x,x0)
-  
+
     ! Allows to reduce the derivative function (slope) associated to a given properties
     ! Allows to slowly approach the resolution limit
-    
-    implicit none 
-    
-    real(kind=8),intent(in)  :: x,x0  ! 
-    real(kind=8)             :: slope_limiter  
-    
+
+    implicit none
+
+    real(kind=8),intent(in)  :: x,x0  !
+    real(kind=8)             :: slope_limiter
+
     slope_limiter = 0.d0
-    
+
     if (x .le. x0) return
-    
+
     slope_limiter = 1.d0 - exp(-abs(x-x0)/abs(2.d0*x0))
-  
+
     return
   end function slope_limiter
 
   !*****************************************************************************************************************
 
   function Ronbint(f, a, b, param, error, final_order, called_by)
-    
-    ! Return the integral of the function f between a and b by using the 
+
+    ! Return the integral of the function f between a and b by using the
     ! Romberg method
-    
+
     implicit none
-    
+
     integer(kind=4)                               :: order
     integer(kind=4),parameter                     :: maxorder = 12
     integer(kind=4)                               :: loopk
     integer(kind=4)                               :: loopj
     integer(kind=4),intent(out),optional          :: final_order
 
-    character(*),intent(in),optional              :: called_by    ! name of the calling subroutine 
-    
+    character(*),intent(in),optional              :: called_by    ! name of the calling subroutine
+
     real(kind=8),intent(in)                       :: a            ! min range integration
     real(kind=8),intent(in)                       :: b            ! max range integration
     real(kind=8)                                  :: Ronbint
@@ -315,12 +315,12 @@ module utilities
     real(kind=8)                                  :: e
     real(kind=8)                                  :: dh
     real(kind=8)                                  :: R(0:maxorder, 0:maxorder)
-    
+
     external                                      :: f
 
     if (a .gt. b) then
       !
-      call IO_print_error_message('Ronbint : a > b',only_rank = rank,called_by = called_by)  
+      call IO_print_error_message('Ronbint : a > b',only_rank = rank,called_by = called_by)
       stop
     end if
 
@@ -356,7 +356,7 @@ module utilities
     !
     if (is_NaN(R(order, order))) then
         !
-        call IO_print_warning_message('Ronbint : NAN',only_rank = rank,called_by = called_by)  
+        call IO_print_warning_message('Ronbint : NAN',only_rank = rank,called_by = called_by)
     end if
     !
     if (R(order, order) .ne. 0.d0) then
@@ -375,18 +375,18 @@ module utilities
 
   !*****************************************************************************************************************
 
-  function trap(y,x)              
-      
-    ! ARRAY TRAPEZIUM RULE TO INTEGRATE PRE-TABULATED Y OVER X   
-      
+  function trap(y,x)
+
+    ! ARRAY TRAPEZIUM RULE TO INTEGRATE PRE-TABULATED Y OVER X
+
     implicit none
-    
+
     integer(kind=4)         :: i           ! index loop
     integer(kind=4)         :: n
-    
+
     real(kind=4),intent(in) :: x(:),y(:)   ! x and y tables
     real(kind=8)            :: trap
-    
+
     if (size(x) .ne. size(y)) then
       !
       write(*,'(a)') '!!! ERROR in trap : nx /= ny'
@@ -395,18 +395,18 @@ module utilities
       !
       n = size(x)
     end if
-    
-    trap = 0.d0    ! init      
+
+    trap = 0.d0    ! init
     do i = 1,n-1
        !
        trap = trap + (y(i) + y(i+1))*(x(i+1) - x(i))
     end do
     trap = trap*0.5d0
- 
+
     return
-    
+
   end function trap
-  
+
   !*****************************************************************************************************************
 
   function normal_distribution(mean,sigma)
@@ -414,7 +414,7 @@ module utilities
     ! Allow to give a ramdom variable following a normal distribution of mean "mean" and of standard deviation "sigma"
 
     implicit none
-    
+
     real(kind=8),intent(in)    :: mean               ! the mean of the normal distribution
     real(kind=8),intent(in)    :: sigma              ! the standard deviation of the normal distribution
     real(kind=8)               :: normal_distribution
@@ -422,9 +422,9 @@ module utilities
 
     call random_number(r1)   ! get a first uniformed distributed number [0:1]
     call random_number(r2)   ! get a second uniformed distributed number [0:1]
- 
+
     ! convert to normal distribution
- 
+
     normal_distribution = sigma*sqrt(-2.0d0*log(r1))*cos(2.0d0*pi*r2) + mean
     return
 
@@ -442,7 +442,7 @@ module utilities
     real(kind=8)              :: erf_func ! the result
     real(kind=8)              :: xx
 
-    ! Computed with the fitting formula in Lu et al 2010   
+    ! Computed with the fitting formula in Lu et al 2010
     xx = x * sqrt(2.0d0)
     if (x > 0.d0) then
        !
@@ -459,35 +459,35 @@ module utilities
   !*****************************************************************************************************************
 
   function locate2D(x,y,tab,nx,ny,xmin,ymin,dx,dy)
-  
+
     ! RETURN THE VALUE STORED IN A PRE-TABULATED 2D TABLE LINKED TO INPUT PARAMETERS x AND y
-    !  
+    !
 
     implicit none
-    
+
     integer(kind=4),intent(in) ::  nx,ny  ! number of data point over x and y axis respectivelly
     integer(kind=4)            ::  ix,iy  ! loop index over x and y
-    
+
     real(kind=8),intent(in)    :: x,y
-    real(kind=8)               :: xv, yv        
+    real(kind=8)               :: xv, yv
     real(kind=8),intent(in)    :: tab(nx,ny)
     real(kind=8),intent(in)    :: xmin,ymin   ! minimum values over x and y respectively
-    real(kind=8)               :: xmax,ymax   ! maximum values over x and y respectively 
-    real(kind=8),intent(in)    :: dx,dy       ! stepes over x and y respectively 
+    real(kind=8)               :: xmax,ymax   ! maximum values over x and y respectively
+    real(kind=8),intent(in)    :: dx,dy       ! stepes over x and y respectively
     real(kind=8)               :: locate2D
 
     ! x
     !
     xmax = xmin+real(nx-1,8)*dx
     xv   = min(max(x,xmin),xmax)
-    !   
+    !
     ! y
     !
     ymax = ymin+real(ny-1,8)*dy
     yv   = min(max(y,ymin),ymax)
     !
-    ix = floor((xv-xmin)/dx) +1   ! Define the x index 
-    iy = floor((yv-ymin)/dy) +1   ! Define the y index    
+    ix = floor((xv-xmin)/dx) +1   ! Define the x index
+    iy = floor((yv-ymin)/dy) +1   ! Define the y index
     locate2D = tab(ix,iy)
 
     return

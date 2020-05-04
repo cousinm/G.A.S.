@@ -1424,7 +1424,7 @@ contains
         stop  ! stop the program
     end if
     !
-    if ((gas_mass(bh%hot_gas) .gt. M_gas_crit) .and. (gas_temp(bh%hot_gas) .lt. 9.9d-1*diffuse_gas_temp)) then
+    if ((gas_mass(bh%hot_gas) .gt. 0.d0) .and. (gas_temp(bh%hot_gas) .lt. 9.9d-1*diffuse_gas_temp)) then
         !
         call IO_print_warning_message('T_hot < T_cool_gas',only_rank=rank,called_by='baryon_halo_evolve_hot_gas')
 #ifdef PRINT_WARNING
@@ -1711,7 +1711,7 @@ contains
         call gas_add(bh1%hot_gas,bh2%hot_gas)   
         ! inject thermal energy due to the merger
         Eint = gravconst_code_unit*(Mhot_1*Mhot_2)/dm1%R_vir
-        call gas_inject_termal_energy(bh1%hot_gas,Eint)
+        call gas_inject_thermal_energy(bh1%hot_gas,Eint)
         !
         ! update cooling clock
         if (M_hot .gt. 0.d0) then 

@@ -3,14 +3,14 @@ module dust
   use stellar_population_library  ! Contains stellar population library (e.g. acces to loss mass rate, spectra)
 
   public
-  
+
   !*****************************************************************************************************************
-  ! 
+  !
   !  OVERVIEW
-  ! 
-  !  The dust module defines all properties and all procedures assossiated to a dust object. 
+  !
+  !  The dust module defines all properties and all procedures assossiated to a dust object.
   !  A dust object is linked to a gas object
-  !  A dust component is associated to each gas component used in the model: 
+  !  A dust component is associated to each gas component used in the model:
   !    - Diffuse gas in disc and bulge
   !    - dense/structured/fragmented gas in the disc
   !    - gas torus associated to the AGN component
@@ -36,11 +36,11 @@ module dust
   !   dust_evolve                        : evolve dust properties (mass, extinction, temperature)
   !      called by : disc_evolve
   !
-  !   dust_read_abs_sca_properties       : read absorbtion and scattering properties of dust 
-  !      called by : main program 
+  !   dust_read_abs_sca_properties       : read absorbtion and scattering properties of dust
+  !      called by : main program
   !
   !   dust_read_dust_SEDs                : read dust ir spectral energy distribution
-  !      called by : main program 
+  !      called by : main program
   !
   !   dust_compute_effective_extinction  : compute effective extinction due to the dust component
   !
@@ -50,7 +50,7 @@ module dust
   !
   !   dust_mass                          : return the mass of the dust component
   !
-  !   dust_extinction                    : return the FUV extinction (based on Boquien+13)  
+  !   dust_extinction                    : return the FUV extinction (based on Boquien+13)
   !
   !   dust_AV                            : return A(V) from the effective extinction profile of a dust component
   !
@@ -58,7 +58,7 @@ module dust
   !
   !  PRINTING PROCEDURES
   !
-  !   dust_load_dust_data                : load dust data, create the dust output properties list 
+  !   dust_load_dust_data                : load dust data, create the dust output properties list
   !      called by : disc_load_disc_data
   !
   !*****************************************************************************************************************
@@ -71,65 +71,65 @@ module dust
      character(6)             :: geom         ! geometry distribution 'slab(disc) or dwek(bulge)'
      real(kind=8)             :: mass         ! mass of dust
      real(kind=8)             :: MZ_MH        ! metal mass over hydrogen mass (use to convert M_pah/M_H in M_pah/M_dust)
-     real(kind=8)             :: incl         ! inclination (a local copy of disc%incl) 
+     real(kind=8)             :: incl         ! inclination (a local copy of disc%incl)
      real(kind=8)             :: f_pah        ! fraction of pah
      real(kind=8)             :: f_bg         ! fraction of big grain
-     real(kind=8)             :: tau          ! ISM extinction in FUV or V band 
+     real(kind=8)             :: tau          ! ISM extinction in FUV or V band
      real(kind=4),allocatable :: eff_ext(:)   ! effective extinction
      real(kind=4),allocatable :: spectrum(:)  ! dust spectrum erg/s/NH
   end type dust_type
 
   ! PARAMETERS **************************************
-  
+
   integer(kind=4)           :: ndtypes            ! number of grain types
   integer(kind=4)           :: nISRFBins          ! number of ISRF bins in dust SEDs
-  
+
 ;  character(4),allocatable  :: dust_types(:)      ! names of dust types
-  
-  real(kind=8),parameter    :: f_pah_ref    = 4.58d-2 
-  real(kind=8),parameter    :: f_vsg_ref    = 16.0d-2 
+
+  real(kind=8),parameter    :: f_pah_ref    = 4.58d-2
+  real(kind=8),parameter    :: f_vsg_ref    = 16.0d-2
   real(kind=8),parameter    :: O_over_H_min = 6.5d0
   real(kind=8),parameter    :: MZ_MH_solar  = 2.d-2
-  
+
   ! SPECTRAL ENERGY DISTRIBUTION OF DUST ************
 
-  real(kind=4),allocatable  :: dust_sed(:,:,:,:) ! Infrared spectrum for different grain types and ISRF intensities 
-                                                 ! The library contains SED for young and old stellar populations sp_age = 1, 2 
+  real(kind=4),allocatable  :: dust_sed(:,:,:,:) ! Infrared spectrum for different grain types and ISRF intensities
+                                                 ! The library contains SED for young and old stellar populations sp_age = 1, 2
                                                  ! (nWaves, nISRFbins, sp_age, ndtypes)
 
   ! ABSORBTION & SCATTERING PROPERTIES **************
 
   real(kind=8),allocatable  :: dust_Abs(:,:)     ! dust absorbtion (gt,lambda)
   real(kind=8),allocatable  :: dust_Sca(:,:)     ! dust scattering (gt,lambda)
-  
+
   ! DEFINE HEADER INFORMATIONS **********************
-  
+
   integer(kind=4),parameter :: nb_dust_field = 4  ! Number of dust properties saved
 
 contains
 
   !*****************************************************************************************************************
-  ! 
+  !
   ! MPI PROCESSES
   !
   !*****************************************************************************************************************
 
 #ifdef LUMINOUS_PROCESSES
-! -------------------------------------------------  
-  subroutine dust_send_data(dust)                                     
-  
+! -------------------------------------------------
+  subroutine dust_send_data(dust)
+
     ! SEND SPECIFIC INFORMATIONS ABOUT A DUST COMPONENT
-  
+
     implicit none
 
     logical                      :: go_down
 
     type(dust_type),intent(in)   :: dust         ! dust component
-    
+
     ! data are sent by physical process (odd) and receive by luminous process (even)
-    
+
     go_down = .false.
-    
+
     if (dust%tau .gt. 0.d0) then
         ! there is some dust
         !
@@ -154,29 +154,29 @@ contains
         ! send exit loop order
         call MPI_SEND(go_down,1,MPI_LOGICAL,rank+1,dust_tag+1,MPI_COMM_WORLD,ierror)
     end if
-    
+
     return
-  end subroutine dust_send_data 
-  
+  end subroutine dust_send_data
+
   !*****************************************************************************************************************
-  
-  subroutine dust_receive_data(dust)                                     
-  
+
+  subroutine dust_receive_data(dust)
+
     ! RECEIVE SPECIFIC INFORMATIONS ABOUT A DUST COMPONENT
-  
+
     implicit none
 
     logical                      :: go_down
-    
+
     type(dust_type),intent(out)  :: dust
-    
+
     ! data are sent by physical process (odd) and receive by luminous process (even)
-    
+
     call dust_void(dust) ! init
-    
+
     ! receive exit loop order
     call MPI_RECV(go_down,1,MPI_LOGICAL,rank-1,dust_tag+1,MPI_COMM_WORLD,statut,ierror)
-    
+
     if (go_down) then
         ! receive dust information
         ! receive dust geom
@@ -194,10 +194,10 @@ contains
         ! receive dust extinction in ISM
         call MPI_RECV(dust%tau,1,MPI_REAL8,rank-1,dust_tag+9,MPI_COMM_WORLD,statut,ierror)
     end if
-    
+
     return
-  end subroutine dust_receive_data 
-! ------------------------------------------------- 
+  end subroutine dust_receive_data
+! -------------------------------------------------
 #endif
 ! LUMINOUS_PROCESSES
 
@@ -208,7 +208,7 @@ contains
   !*****************************************************************************************************************
 
   subroutine dust_void(dust,init_geom)
-    
+
     ! SET TO NULL VALUES ALL DUST PROPERTIES
 
     implicit none
@@ -229,15 +229,15 @@ contains
     dust%tau    = -1.d0
     if (allocated(dust%eff_ext)) dust%eff_ext(:)   = 0.d0
     if (allocated(dust%spectrum)) dust%spectrum(:) = 0.d0
-    
+
     return
   end subroutine dust_void
 
   !*****************************************************************************************************************
-  
+
   subroutine dust_copy(d1,d2)
-    
-    ! COPY A DUST COMPONENT IN AN OTHER 
+
+    ! COPY A DUST COMPONENT IN AN OTHER
 
     implicit none
 
@@ -274,18 +274,18 @@ contains
     !
     return
   end subroutine dust_copy
-  
+
   !*****************************************************************************************************************
-  
+
   subroutine dust_mass_fraction(dust,gas)
-    
+
     ! COMPUTE THE FRACTION OF PAH, VSG and BG IN THE DUST COMPONENT ! M_pah/M_dust
     ! use Remy-Ruyer+15 Eq 5 (Metallicity)
-    ! The relation measured by Remy-Ruyer+15 shows a scatter of 0.35 dex. 
-    ! We assume a dispersion for the log normal distribution of 3sig = 0.35 --> sig = 0.12  
+    ! The relation measured by Remy-Ruyer+15 shows a scatter of 0.35 dex.
+    ! We assume a dispersion for the log normal distribution of 3sig = 0.35 --> sig = 0.12
 
     implicit none
-   
+
     real(kind=8)                   :: M_H, M_Z
     real(kind=8)                   :: lf
     real(kind=8)                   :: O_over_H   ! oxygen to hydrogen relative abundance
@@ -293,28 +293,28 @@ contains
     real(kind=8)                   :: f_min_bg = 4.d0/5.d0
     real(kind=8)                   :: new_f_pah
     real(kind=8)                   :: new_f_bg
-    
+
     type(dust_type),intent(inout)  :: dust       ! the dust component
-    
+
     type(gas_type),intent(in)      :: gas        ! the gas component of the remnant disc
 
     dust%f_pah = -1.d0; dust%f_bg = -1.d0
-    
-#ifdef PRINTALL 
+
+#ifdef PRINTALL
     ! -------------------------------------------------
     call IO_print_message('dust_mass_fraction',only_rank=rank,component='dust')
     ! -------------------------------------------------
 #endif
- 
+
 #ifndef NO_EXTINCTION
-! ------------------------------------------------- 
-    !   
+! -------------------------------------------------
+    !
     ! Oxygen relative abundance (compare to Hydrogen, in number)
     O_over_H = O_H(gas)
-    
-    if (O_over_H .le. 0.d0) return ! no gas enough 
 
-    if (12.d0 + log10(O_over_H) .lt. O_over_H_min) return 
+    if (O_over_H .le. 0.d0) return ! no gas enough
+
+    if (12.d0 + log10(O_over_H) .lt. O_over_H_min) return
 
     M_H = gas_mass(gas,component='H1')
     M_Z = gas_mass(gas,component='metals')
@@ -322,21 +322,21 @@ contains
     dust%MZ_MH = M_Z / M_H
     ! We apply a shift of 0.2 dex
     ! To take into account variations due to the different prescriptions (from PP04 O3N2 to Tex measurments)
-    lf = -11.d0 + 1.3d0*(12.d0 + log10(O_H(gas)) -2.d-1) 
-    lf = max(-6.d0, min(5.d-1,normal_distribution(lf,2.d-1))) 
+    lf = -11.d0 + 1.3d0*(12.d0 + log10(O_H(gas)) -2.d-1)
+    lf = max(-6.d0, min(5.d-1,normal_distribution(lf,2.d-1)))
     new_f_pah = (10.**lf)*f_pah_ref
-    ! 
+    !
     call random_number(r)
     !
     if (dust%f_pah .lt. 0.d0) then
         ! init
         ! M_pah/M_dust [0% : 10%]
-        dust%f_pah = new_f_pah 
+        dust%f_pah = new_f_pah
     else
         ! The new value is randomly taken between the previous and the new reference value: new_f_pah
-        dust%f_pah = max(0.d0,dust%f_pah + r*(new_f_pah-dust%f_pah)) 
-    end if  
-    ! 
+        dust%f_pah = max(0.d0,dust%f_pah + r*(new_f_pah-dust%f_pah))
+    end if
+    !
     new_f_bg = f_min_bg*(1.d0-dust%f_pah)
     if (dust%f_bg .lt. 0.d0) then
         ! init
@@ -353,11 +353,11 @@ contains
                    real_param_val = (/dust%f_bg,dust%f_pah,O_over_H/))
         stop
     end if
-    
-! -------------------------------------------------
-#endif 
 
-#ifdef PRINTALL 
+! -------------------------------------------------
+#endif
+
+#ifdef PRINTALL
     ! -------------------------------------------------
     call IO_print_message('dust_mass_fraction ... done',only_rank=rank,component='dust')
     ! -------------------------------------------------
@@ -365,28 +365,28 @@ contains
 
     return
   end subroutine dust_mass_fraction
-   
-  !*****************************************************************************************************************  
-  
+
+  !*****************************************************************************************************************
+
   subroutine dust_evolve(d,gas,rc,incl)
-  
+
     ! COMPUTE DUST PROPERTIES
-    
+
     implicit none
 
     real(kind=8),intent(in)           :: rc    ! the half mass radius of the host component (from rd or rb)
     real(kind=8),intent(in),optional  :: incl  ! disc inclination (create a local copy for dust extinction computation)
-    
+
     type(gas_type),intent(in)         :: gas   ! the gas component of the host component
-    
+
     type(dust_type),intent(inout)     :: d     ! the dust component
-    
-#ifdef PRINTALL 
+
+#ifdef PRINTALL
 ! -------------------------------------------------
     call IO_print_message('dust_evolve',only_rank=rank,component='dust')
 ! -------------------------------------------------
 #endif
-    
+
     ! dust inclination
     d%incl = 0.d0
     if (present(incl)) d%incl = incl
@@ -395,34 +395,34 @@ contains
     ! compute the dust FUV extinction
     d%tau = dust_extinction(d,gas,rc)
 
-#ifdef PRINTALL 
+#ifdef PRINTALL
 ! -------------------------------------------------
     call IO_print_message('dust_evolve ... done',only_rank=rank,component='dust')
 ! -------------------------------------------------
 #endif
-    
+
     return
   end subroutine dust_evolve
 
   !*****************************************************************************************************************
- 
+
 #ifdef LUMINOUS_PROCESSES
-! -------------------------------------------------    
+! -------------------------------------------------
   subroutine dust_read_abs_sca_properties
-  
+
     ! READ ABSORBTION AND SCATTERING PROPERTIES OF DUST
-    
+
     implicit none
-    
+
     integer(kind=4)          :: gt,l         ! index loop under dust types and wavelenght
     integer(kind=4)          :: nWaves_dust  ! local variable (process 0, checks if nWaves = nWaves_dust)
-     
+
     character(MAXPATHSIZE)   :: filename
-    character(MAXPATHSIZE)   :: message      ! a message  
+    character(MAXPATHSIZE)   :: message      ! a message
     character(MAXPATHSIZE)   :: line
-    
+
     if (main_process .or. luminous_process) then
-    
+
         call IO_print_message('dust_read_abs_sca_properties')
 
         ! Build the input filename
@@ -432,11 +432,11 @@ contains
         call IO_print_message(message)
         ! Open the library file
         open(unit = abs_sca_unit, file = filename, status = 'old')
-       
+
         do
             read(abs_sca_unit, '(a)', end = 2) line
             if (trim(line) .eq. 'START') then
-                ! all lines before the START keywork are header lines: they contain informations about data 
+                ! all lines before the START keywork are header lines: they contain informations about data
                 !
                 read(abs_sca_unit,*) nWaves_dust, ndtypes
                 !
@@ -444,8 +444,8 @@ contains
                     ! The main process checks if nWaves = nWaves_dust
                     ! If it is not the case the main process kills the run
                     if (nWaves_dust  .ne. nWaves) then
-                        call IO_print_error_message('nWaves_dust /= nWaves',only_rank=rank,called_by='dust_read_abs_sca_properties') 
-                        stop ! stop the program 
+                        call IO_print_error_message('nWaves_dust /= nWaves',only_rank=rank,called_by='dust_read_abs_sca_properties')
+                        stop ! stop the program
                     end if
                 end if
                 !
@@ -470,7 +470,7 @@ contains
                 end do
                 !
                 if (main_process) then
-                    ! Print some informations 
+                    ! Print some informations
                     write(message,'(i1.1,a)') ndtypes, ' dust types are taken into account'
                     call IO_print_message(message)
                     write(message,'(a)') trim(dust_types(1))
@@ -481,18 +481,18 @@ contains
                     call IO_print_message('use', param_name=(/'nWaves                   '/),&
                         int_param_val=(/nWaves_dust/))
                 end if
-                exit  ! quit do loop 
+                exit  ! quit do loop
             end if
             !
             if (line(1:1) .eq. '#') then
                 cycle ! header or something like this (skip)
             else
-                call IO_print_error_message('Impossible to read the line',only_rank=rank,called_by='dust_read_abs_sca_properties') 
+                call IO_print_error_message('Impossible to read the line',only_rank=rank,called_by='dust_read_abs_sca_properties')
                 stop ! stop the program
             end if
         end do
         !
-        l = 0
+        l = 1
         ! Initialize i_14eV, i_FUV, i_6eV, i_B and i_V
         ! 6 eV    => 0.20664 mu m
         ! 13.6 eV => 0.09116 mu m
@@ -527,32 +527,32 @@ contains
         end do
         !
     end if
-    
+
 2   close(abs_sca_unit)
-    
-    return  
+
+    return
   end subroutine dust_read_abs_sca_properties
-  
+
   !*****************************************************************************************************************
-  
+
   subroutine dust_read_dust_SEDs
-  
+
     ! READ DUST SEDs
     ! In this new version, dust SEDs are parametrized by the InterStellar Radiation Field (ISRF)
     ! Dust SEDs are available for ndtypes differents types of dusts
-    
+
     implicit none
-    
+
     integer(kind=4)          :: i,l          ! loop indexes under ISRF and wavelenght
     integer(kind=4)          :: nWaves_dust  ! local variable (process 0, checks if nWaves  = nWaves_dust)
     integer(kind=4)          :: ndtypes_seds ! local variable (process 0, checks if ndtypes = ndtypes_seds)
-     
+
     character(MAXPATHSIZE)   :: filename
-    character(MAXPATHSIZE)   :: message      ! a message  
+    character(MAXPATHSIZE)   :: message      ! a message
     character(MAXPATHSIZE)   :: line
-    
+
     if (main_process .or. luminous_process) then
-    
+
         call IO_print_message('dust_read_dust_SEDs')
 
         ! Build the input filename
@@ -562,11 +562,11 @@ contains
         call IO_print_message(message)
         ! Open the library file
         open(unit = dust_sed_unit, file = filename, status = 'old')
-       
+
         do
             read(dust_sed_unit, '(a)', end = 2) line
             if (trim(line) .eq. 'START') then
-                ! all lines before the START keywork are header lines: they contain informations about data 
+                ! all lines before the START keywork are header lines: they contain informations about data
                 !
                 read(dust_sed_unit,*) nWaves_dust, nISRFBins, ndtypes_seds
                 !
@@ -574,14 +574,14 @@ contains
                     ! The main process checks if nWaves = nWaves_dust
                     ! If it is not the case the main process kills the run
                     if (nWaves_dust  .ne. nWaves) then
-                        call IO_print_error_message('nWaves_dust /= nWaves',only_rank=rank,called_by='dust_read_dust_SEDs') 
-                        stop ! stop the program 
+                        call IO_print_error_message('nWaves_dust /= nWaves',only_rank=rank,called_by='dust_read_dust_SEDs')
+                        stop ! stop the program
                     end if
                     ! The main process checks if ndtypes = ndtypes_seds
                     ! If it is not the case the main process kills the run
                     if (ndtypes_seds  .ne. ndtypes) then
-                        call IO_print_error_message('ndtypes_seds /= ndtypes',only_rank=rank,called_by='dust_read_dust_SEDs') 
-                        stop ! stop the program 
+                        call IO_print_error_message('ndtypes_seds /= ndtypes',only_rank=rank,called_by='dust_read_dust_SEDs')
+                        stop ! stop the program
                     end if
                 end if
                 !
@@ -595,7 +595,7 @@ contains
                 read(dust_sed_unit,*) ISRFBins(1:nISRFBins)
                 read(dust_sed_unit,*) ISRF_ref    ! ISRF reference value (G0 = 1) [erg/s/cm**2]
                 ! convert in code unit [Lsun/kpc**2]
-                ISRF_ref = ISRF_ref/L_Sun_erg_s*(kpc_in_cm)**2   
+                ISRF_ref = ISRF_ref/L_Sun_erg_s*(kpc_in_cm)**2
                 !
                 read(dust_sed_unit,*) ! skip a line #
                 !
@@ -607,17 +607,17 @@ contains
                 end do
                 !
                 if (main_process) then
-                    ! Print some informations 
+                    ! Print some informations
                     call IO_print_message('use', param_name=(/'nISRFBins                ','nWaves                   '/),&
                         int_param_val=(/nISRFBins,nWaves/))
                 end if
-                exit  ! quit do loop 
+                exit  ! quit do loop
             end if
             !
             if (line(1:1) .eq. '#') then
                 cycle ! header or something like this (skip)
             else
-                call IO_print_error_message('Impossible to read the line',only_rank=rank,called_by='dust_read_dust_SEDs') 
+                call IO_print_error_message('Impossible to read the line',only_rank=rank,called_by='dust_read_dust_SEDs')
                 stop ! stop the program
             end if
         end do
@@ -630,27 +630,27 @@ contains
             i = i +1
         end do
         i_1000mic = i -1
-        
+
     end if
-    
+
 2   close(abs_sca_unit)
-    
-    return  
+
+    return
   end subroutine dust_read_dust_SEDs
- 
+
   !*****************************************************************************************************************
-  
+
   subroutine dust_compute_effective_extinction(dust,tau_8mic)
-  
-    ! COMPUTE EFFECTIVE EXTINCTION 
+
+    ! COMPUTE EFFECTIVE EXTINCTION
     ! tau(lambda) and A(lambda) for different geometries
-    
+
     implicit none
 
     integer(kind=4)                   :: gt                      ! dust type
     character(MAXPATHSIZE)            :: message                 ! a message to display
- 
-    real(kind=8)                      :: f_vsg                   ! fraction of vsg                     ! 
+
+    real(kind=8)                      :: f_vsg                   ! fraction of vsg                     !
     real(kind=8)                      :: f_dust(3)
     real(kind=8)                      :: aspect
     real(kind=8),allocatable          :: eff_Ext(:), eff_Alb(:)  ! tmp arrays (extinction and albedo)
@@ -662,10 +662,10 @@ contains
     !
     ! allocate dust%eff_ext
     if (.not. allocated(dust%eff_ext)) allocate(dust%eff_ext(nWaves))  ! create
-    dust%eff_ext = 1.d0                                                ! init 
-    
+    dust%eff_ext = 1.d0                                                ! init
+
     if (dust%tau .le. 0.d0) return ! no extinction
-    
+
     ! ***********************************************
     ! 1st STEP: BUILD THE EFFECTIVE EXTINCTION CURVE
     ! ***********************************************
@@ -685,45 +685,45 @@ contains
     do gt = 1, ndtypes
         eff_Ext = eff_Ext + f_dust(gt)*(dust_Abs(gt,:) + dust_Sca(gt,:))
     end do
-    ! check 
+    ! check
     if (minval(eff_Ext) .lt. 0.d0) then
         write(message,'(a,a,a,e10.3)') 'eff_Ext < 0 [ geom: ', trim(dust%geom), ' ] : ', minval(eff_Ext)
-        call IO_print_error_message(message,only_rank=rank,called_by='dust_compute_effective_extinction') 
+        call IO_print_error_message(message,only_rank=rank,called_by='dust_compute_effective_extinction')
 #ifdef PRINT_WARNING
-! -------------------------------------------------        
+! -------------------------------------------------
         call IO_print_message('use',only_rank=rank,component='dust', &
                param_name = (/'tau                      ','dust%f_pah               ','dust%f_bg                ', &
                               'f_vsg                    '/), &
-               real_param_val  = (/dust%tau,dust%f_pah,dust%f_bg,f_vsg/))                  
+               real_param_val  = (/dust%tau,dust%f_pah,dust%f_bg,f_vsg/))
 ! -------------------------------------------------
 #endif
 ! PRINT_WARNING
         stop ! stop the program
-    end if  
+    end if
     ! Effective albedo in the ratio of Sca onto the effective extinction
     do gt = 1, ndtypes
         eff_Alb = eff_Alb + f_dust(gt)*dust_Sca(gt,:)/eff_Ext
     end do
     if (minval(eff_Alb) .lt. 0.d0) then
         write(message,'(a,a,a,e10.3)') 'eff_Alb < 0 [ geom: ', trim(dust%geom), ' ] : ', minval(eff_Alb)
-        call IO_print_error_message(message,only_rank=rank,called_by='dust_compute_effective_extinction') 
+        call IO_print_error_message(message,only_rank=rank,called_by='dust_compute_effective_extinction')
 #ifdef PRINT_WARNING
-! -------------------------------------------------        
+! -------------------------------------------------
         call IO_print_message('use',only_rank=rank,component='dust', &
                param_name = (/'tau                      ','f_pah                    ', &
                               'f_vsg                    ','f_bg                     '/), &
-               real_param_val  = (/dust%tau,dust%f_pah,f_vsg,dust%f_bg/))                  
+               real_param_val  = (/dust%tau,dust%f_pah,f_vsg,dust%f_bg/))
 ! -------------------------------------------------
 #endif
 ! PRINT_WARNING
         stop ! stop the program
-    end if  
+    end if
     !
     ! ***********************************************
     ! 2d STEP: APPLY GEOMETRY
     ! ***********************************************
     !
-    ! 
+    !
     allocate(alamb(nWaves))  ! create
     alamb(:) = 0.d0          ! init
     !
@@ -735,15 +735,15 @@ contains
        eff_Ext = dust%tau*eff_Ext/eff_Ext(i_FUV)
        !
        ! treat the extreme extinction case
-       aspect = max(1.d-4, abs(cos(dust%incl))) 
+       aspect = max(1.d-4, abs(cos(dust%incl)))
        !
        alamb = sqrt(1.d0 - eff_Alb)*eff_Ext/aspect
        !
        select case (trim(dust%geom))
        case ('slab','disc','disk')
             ! compute effective extinction
-            dust%eff_ext = real((1.d0 - exp(-1.d0*alamb))/alamb,4) 
-            ! 
+            dust%eff_ext = real((1.d0 - exp(-1.d0*alamb))/alamb,4)
+            !
        case ('screen','BC')
             ! compute effetive extinction
             dust%eff_ext = real(exp(-1.d0*alamb),4)
@@ -780,13 +780,13 @@ contains
         !
         if (minval(alamb) .le. 0.d0) then
             write(message,'(a,a,a,e10.3)') 'alamb <= 0 [ geom: ', trim(dust%geom), ' ] : ', minval(alamb)
-            call IO_print_warning_message(message,only_rank=rank,called_by='dust_compute_effective_extinction') 
+            call IO_print_warning_message(message,only_rank=rank,called_by='dust_compute_effective_extinction')
 #ifdef PRINT_WARNING
-! -------------------------------------------------        
+! -------------------------------------------------
             call IO_print_message('use',only_rank=rank,component='dust', &
                 param_name = (/'tau                      ','f_pah                    ', &
                               'f_vsg                    ','f_bg                     '/), &
-                real_param_val  = (/dust%tau,dust%f_pah,f_vsg,dust%f_bg/))                  
+                real_param_val  = (/dust%tau,dust%f_pah,f_vsg,dust%f_bg/))
 ! -------------------------------------------------
 #endif
 ! PRINT_WARNING
@@ -797,56 +797,56 @@ contains
         !
     case default
         write(message,'(a,a,a)') 'Dust geometry distribution', trim(dust%geom), ' not defined'
-        call IO_print_error_message(message,only_rank=rank,called_by='dust_compute_effective_extinction')    
+        call IO_print_error_message(message,only_rank=rank,called_by='dust_compute_effective_extinction')
         stop  ! stop the program
     end select
     !
     if (minval(dust%eff_Ext) .lt. 0.d0) then
         write(message,'(a,a,a,e10.3,a)') 'un-physical value of dust%eff_Ext [ geom: ', trim(dust%geom), ' ], [ min: ', minval(eff_Ext), ' ]'
-        call IO_print_error_message(message,only_rank=rank,called_by='dust_compute_effective_extinction') 
+        call IO_print_error_message(message,only_rank=rank,called_by='dust_compute_effective_extinction')
 #ifdef PRINT_WARNING
-! -------------------------------------------------        
+! -------------------------------------------------
         call IO_print_message('use',only_rank=rank,component='dust', &
                param_name = (/'tau                      ','f_pah                    ', &
                               'f_vsg                    ','f_bg                     '/), &
-               real_param_val  = (/dust%tau,dust%f_pah,f_vsg,dust%f_bg/))                  
+               real_param_val  = (/dust%tau,dust%f_pah,f_vsg,dust%f_bg/))
 ! -------------------------------------------------
 #endif
 ! PRINT_WARNING
         stop ! stop the program
     end if
-      
+
     if (allocated(eff_Ext)) deallocate(eff_Ext)  ! erase
     if (allocated(eff_Alb)) deallocate(eff_Alb)  ! erase
     if (allocated(alamb))   deallocate(alamb)    ! erase
 
     return
   end subroutine dust_compute_effective_extinction
-  
+
   !*****************************************************************************************************************
-  
+
   subroutine dust_build_dust_spectrum(dust,ISRF,dspt)
-  
+
     ! BUILD THE INFRARED SPECTRUM ASSOCIATED TO THE DUST COMPONENT
-    
+
     implicit none
-    
+
     integer(kind=4)                   :: iISRF,gt,iage    ! ISRF,dust type and dspt loop indexes
-    
+
     character(*),intent(in),optional  :: dspt             ! dominated stellar population type (old young stars)
     character(MAXPATHSIZE)            :: message          ! a message to display
-    
+
     real(kind=8),intent(in)           :: ISRF             ! ISRF scalling factor
     real(kind=8)                      :: f_vsg            ! fraction of vsg
     real(kind=8)                      :: f_dust(3)
 
     type(dust_type),intent(inout)     :: dust             ! a dust component
-    
+
     !
     ! allocate dust%spectrum
     if (.not. allocated(dust%spectrum)) allocate(dust%spectrum(nWaves))  ! create
     dust%spectrum(:) = 0.d0                                              ! init
-    
+
     if (dust%tau .le. 0.d0) return ! no dust
     !
     ! select the best SED template as function of the ISRF
@@ -861,25 +861,25 @@ contains
     f_vsg = 1.d0 - (dust%f_pah + dust%f_bg)
     f_dust = (/dust%f_pah,f_vsg,dust%f_bg/)
     !
-    select case (trim(dspt)) 
+    select case (trim(dspt))
         case ('young','ystars','young stars')
             iage = 1
         case ('old','ostars','old stars')
             iage = 2
         case default
             write(message,'(a,a,a)') 'Keyword ', trim(dspt), ' not defined'
-            call IO_print_error_message(message,only_rank=rank,called_by='dust_build_dust_spectrum')    
+            call IO_print_error_message(message,only_rank=rank,called_by='dust_build_dust_spectrum')
             stop  ! stop the program
     end select
-     
+
     do gt = 1, ndtypes
         dust%spectrum = dust%spectrum + real(f_dust(gt)*dust_sed(:,iISRF,iage,gt),4)    ! Lsun/Msun/Md
     end do
-    
+
     return
   end subroutine dust_build_dust_spectrum
-  
-! ------------------------------------------------- 
+
+! -------------------------------------------------
 #endif
 ! LUMINOUS_PROCESSES
 
@@ -888,70 +888,70 @@ contains
   ! FUNCTIONS
   !
   !*****************************************************************************************************************
- 
+
   function dust_mass(dust)
-  
+
     ! RETURN THE MASS OF DUST
-    
+
     implicit none
-    
+
     real(kind=8)                :: dust_mass
-    
+
     type(dust_type),intent(in)  :: dust
-    
+
     dust_mass = dust%mass
-    
+
     return
   end function
-  
-  !*****************************************************************************************************************  
-  
+
+  !*****************************************************************************************************************
+
   function dust_extinction(dust,gas,rc)
-  
-    ! RETURN THE FACE-ON OPTICAL DEPTH 
+
+    ! RETURN THE FACE-ON OPTICAL DEPTH
     ! Use a metallicity dependant prescription based on Boquien+13 Eq. 13
     ! This FUV-band extinction (for disc) is a function of both the hydrogen surface density and the oxygen abundance O/H
-    ! The V-band extinction (for bulges) is a function of both the Hydrogen column density and the metallicity 
-    
+    ! The V-band extinction (for bulges) is a function of both the Hydrogen column density and the metallicity
+
     implicit none
-    
-    character(MAXPATHSIZE)     :: message          ! a message 
-    
-    real(kind=8),intent(in)    :: rc               ! radius
+
+    character(MAXPATHSIZE)     :: message          ! a message
+
+    real(kind=8),intent(in)    :: rc               ! the half mass/ characteristic radius
     real(kind=8)               :: rc_in_cm         ! rc converted in cm
     real(kind=8)               :: M_H, N_H         ! hydrogen mass, column density
     real(kind=8)               :: Sig_H            ! Hydrogen surface density
     real(kind=8)               :: O_over_H         ! Oxygen relative abundance (compare to Hydrogen)
-    real(kind=8)               :: dust_extinction  ! The FUV extinction tating into account metallicity dependance 
-    
+    real(kind=8)               :: dust_extinction  ! The FUV extinction tating into account metallicity dependance
+
     type(dust_type),intent(in) :: dust             ! the dusc component
     type(gas_type),intent(in)  :: gas              ! the gas component
- 
-#ifdef PRINTALL 
+
+#ifdef PRINTALL
     ! -------------------------------------------------
     call IO_print_message('dust_extinction',only_rank=rank,component='dust')
     ! -------------------------------------------------
-#endif   
-    
+#endif
+
     dust_extinction = -1.d0 ! init
 
     if ((dust%f_pah .le. 0.d0) .or. (dust%f_bg .le. 0.d0)) return
     if (rc .le. 0.d0) return
-    
+
     M_H = gas_mass(gas,component='H1')
-    
+
     ! Oxygen relative abundance (compare to Hydrogen, in number)
     O_over_H = O_H(gas)
- 
-    select case (trim(dust%geom)) 
+
+    select case (trim(dust%geom))
     case('slab','sdwich','disc','disk')
         !
         ! compute hydrogen column density
-        ! the diffuse gas evolve in a thick disc 2 times larger than the stellar component 
-        ! 50.0% of the mass of an exponential disc with a characteristic radius "rd" in enclosed in a radius r_50 = 1.68 x rd 
-        ! If stars are distributed in the mid-plan of the disc, the light produced by stars only 'see' 
+        ! the diffuse gas evolve in a thick disc 2 times larger than the stellar component
+        ! 50.0% of the mass of an exponential disc with a characteristic radius "rd" in enclosed in a radius r_50 = 1.68 x rd
+        ! If stars are distributed in the mid-plan of the disc, the light produced by stars only 'see'
         ! in average half of the gas mass before to leave the disc
-        Sig_H = 5.d-1*5.d-1*M_H*mass_code_unit_in_M_Sun/(pi*(2.d0*1.68d0*rc*1.d3)**2.)    ! in Msun/pc**2
+        Sig_H = 5.d-1*5.d-1*M_H*mass_code_unit_in_M_Sun/(pi*(rc*1.d3)**2.)    ! in Msun/pc**2
         !
         ! tau_FUV
         dust_extinction = 1.926d0 + 5.1d-2*Sig_H
@@ -960,7 +960,10 @@ contains
     case('clumps','clumpy','BC','screen')
         !
         ! compute hydrogen column density
-        Sig_H = M_H*mass_code_unit_in_M_Sun/(pi*(5.d-1*rc*1.d3)**2.)     ! in Msun/pc**2
+        ! In the case of a BE sphere, the surface density evolve very fast
+        ! from the output to the central radius
+        !
+        Sig_H = 5.d-1*M_H*mass_code_unit_in_M_Sun/(pi*(rc*1.d3)**2.)     ! in Msun/pc**2
         !
         ! tau_FUV
         dust_extinction = 1.364d0 + 2.9d-2*Sig_H
@@ -976,58 +979,58 @@ contains
         dust_extinction = (gas_metallicity(gas)/Z_sun)**(1.6)*(N_H/2.1d21)
         !
     case default
-        call IO_print_error_message('geometry not allowed',called_by = 'dust_extinction')  
+        call IO_print_error_message('geometry not allowed',called_by = 'dust_extinction')
         write(message,'(a,a,a)') 'Keyword: ', trim(dust%geom), ' unknown !'
         call IO_print_message(trim(message))
         stop ! stop the program
-    end select  
-    
-    ! In all cases the reference depth is limited to tau = [0.01 ; 1000].
-    dust_extinction = max(1.d-2,min(dust_extinction,1.d3))   
+    end select
 
-#ifdef PRINTALL 
+    ! In all cases the reference depth is limited to tau = [0.01 ; 1000].
+    dust_extinction = max(1.d-2,min(dust_extinction,1.d3))
+
+#ifdef PRINTALL
     ! -------------------------------------------------
     call IO_print_message('dust_extinction ... done',only_rank=rank,component='dust')
     ! -------------------------------------------------
-#endif  
+#endif
 
     return
   end function dust_extinction
-  
+
   !*****************************************************************************************************************
-  
-  function dust_AV(d)                    
-  
-    ! RETURN A(V) FROM THE EFFECTIVE EXTINCTION PROFILE OF A DUST COMPONENT 
-    
+
+  function dust_AV(d)
+
+    ! RETURN A(V) FROM THE EFFECTIVE EXTINCTION PROFILE OF A DUST COMPONENT
+
     implicit none
-    
+
     real(kind=4)                 :: dust_AV   ! the attenuation in the Visible band
-     
+
     type(dust_type),intent(in)   :: d         ! A dust component
-    
+
     dust_AV = -2.5*log10(d%eff_Ext(i_V))
-    
+
     return
   end function dust_AV
-  
+
   !*****************************************************************************************************************
-  
-  function dust_E_BV(d)    
-  
-    ! RETURN E(B-V) FROM THE EFFECTIVE EXTINCTION PROFILE OF A DUST COMPONENT 
-    
+
+  function dust_E_BV(d)
+
+    ! RETURN E(B-V) FROM THE EFFECTIVE EXTINCTION PROFILE OF A DUST COMPONENT
+
     implicit none
-    
+
     real(kind=4)                 :: dust_E_BV   ! the attenuation
-     
+
     type(dust_type),intent(in)   :: d           ! A dust component
-    
+
     dust_E_BV = -2.5*log10(d%eff_Ext(i_B)) + 2.5*log10(d%eff_Ext(i_V))
-    
+
     return
   end function dust_E_BV
-  
+
   !*****************************************************************************************************************
   !
   ! PRINTING PROCEDURES
@@ -1039,19 +1042,19 @@ contains
     ! CREATE THE DUST OUTPUT PROPERTIES LIST
 
     implicit none
-    
+
     real(kind=8), intent(inout) :: dust_data(nb_dust_field)
 
     type(dust_type),intent(in)  :: dust    ! dust component
 
     ! For information
-    ! 'f_pah   ','f_bg    ', 'tau     ','mZmH    '       
+    ! 'f_pah   ','f_bg    ', 'tau     ','mZmH    '
 
     dust_data = (/dust%f_pah,dust%f_bg,dust%tau,dust%mZ_mH/)
 
     return
   end subroutine dust_load_dust_data
-  
+
   !***********************************************************************************************************
 
 end module dust

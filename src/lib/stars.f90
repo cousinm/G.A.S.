@@ -683,13 +683,16 @@ contains
 
     if (stars1%exist) then
        ! the stellar population exists
-       if (stars1%mass .ge. stars2%mass) then
-          ! stars1 is more massive than stars2 --> OK
-          stars1%mass = stars1%mass - stars2%mass  ! substarct stellar mass
-          if (stars1%mass .lt. M_gas_null) then  ! the all stars mass in lower than 0.1 solar mass, which is negligible
-             call stars_void(stars1)             ! erase the stellar population and --> exit
+       if (abs(stars1%mass-stars2%mass) .le. M_gas_null) then
+          ! The difference between the two stellar masses is lower than 1.0 solar mass, which is negligible 
+          ! probably cumulative computationnal errors
+          call stars_void(stars1)  ! erase the stellar population and --> exit
              return 
-          else
+       else 
+          ! The remanent stellar mass is not negligable 
+          if (stars2%mass .le. stars1%mass) then
+             ! stars1 is more massive than stars2 --> OK
+             stars1%mass = stars1%mass - stars2%mass  ! substarct stellar mass
              ! the remanent stellar mass is not negligable 
              stars1%iMaxAge = max(stars1%iMaxAge,stars2%iMaxAge)                     ! compute max index of sfh_tab 
              if (minval(stars1%sfh_tab-stars2%sfh_tab) .lt. 0.d0) then    ! bin with negative mass
@@ -711,14 +714,14 @@ contains
                     end do
                 end do
                 call stars_compute_properties(stars1) ! normalisation
-            end if
+             end if
+          else
+             call IO_print_error_message('stars1%mass < stars2%mass', &
+                   only_rank = rank, called_by = trim(message))
+             call IO_print_message('with',only_rank=rank,component='stars', &
+                   param_name = (/'stars1%mass              ','stars2%mass              ' /), real_param_val  = (/stars1%mass,stars2%mass/))
+             stop ! stop the program
           end if
-       else
-          call IO_print_error_message('stars1%mass < stars2%mass', &
-               only_rank = rank, called_by = trim(message))
-          call IO_print_message('with',only_rank=rank,component='stars', &
-               param_name = (/'stars1%mass              ','stars2%mass              ' /), real_param_val  = (/stars1%mass,stars2%mass/))
-          stop ! stop the program
        end if
     else 
        ! the stellar popualtion stars1 doesn't exist

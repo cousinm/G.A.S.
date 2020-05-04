@@ -90,8 +90,6 @@ module halo
   
   ! OTHER DEFINITIONS *******************
 
-  real(kind=8)              :: halo_dt_min_use       ! minimal time-step used at the halo scale
-
 contains
 
   !*****************************************************************************************************************
@@ -482,7 +480,7 @@ contains
         ! convert inst_galaxy_ejecta_rate (real 8) into a gas object
         ! we assume that ejecta have a similar composition than the galaxy disc
         call gas_void(galaxy_ejecta_rate)      ! init
-        galaxy_ejecta_rate = inst_galaxy_ejecta_rate*galaxy_gas_signature(h%galaxy,component='disc',apply_as='rate_builder',called_by='galaxy_ejecta_rate')
+        galaxy_ejecta_rate = inst_galaxy_ejecta_rate*galaxy_gas_signature(h%galaxy,component='disc',apply_as='rate_builder',called_by='halo_evolve')
         !
         call baryon_halo_evolve_hot_gas_I(h%baryon_halo,h%dm,galaxy_ejecta_rate,f_in, &
                     hot_dt_optim,galaxy_ejecta_rate_Wd,galaxy_ejecta_rate_Wu,f_in_Wd,f_in_Wu)                   ! init
@@ -522,7 +520,13 @@ contains
       call baryon_halo_compute_galaxy_fresh_gas_accretion_rate(h%baryon_halo,galaxy_fresh_gas_acc_rate)
       !
       ! Compute galaxy stripping 
+      inst_galaxy_stripping_rate = 0.d0
+#ifdef SUB_STRIPPING
+! -------------------------------------------------       
       call halo_compute_stripping_rate(h,inst_galaxy_stripping_rate,host=host)
+! -------------------------------------------------
+#endif  
+! SUB_STRIPPING      
       ! convert inst_galaxy_ejecta_rate (real 8) into a gas object
       ! we assume that the stipped gas has a similar composition than the diffuse gas contained in the disc
       galaxy_stripping_rate = inst_galaxy_stripping_rate*galaxy_gas_signature(h%galaxy,component='disc',subcomponent='diffuse',apply_as='rate_builder',called_by='galaxy_stripping_rate')
@@ -731,7 +735,9 @@ contains
   ! FUNCTIONS
   !
   !*****************************************************************************************************************
-  
+
+#ifdef SUB_STRIPPING
+! -------------------------------------------------   
   subroutine halo_compute_stripping_rate(h,inst_stripping_rate,host)
   
     ! COMPUTE THE AVERAGE STRIPPING RATE AFFECTING THE SUB-HALO h DURING ITS EVOLUTION IN THE 
@@ -761,8 +767,6 @@ contains
     ! init 
     inst_stripping_rate = 0.d0
 
-#ifdef SUB_STRIPPING
-! ------------------------------------------------- 
     if (present(host)) then
         if (baryon_halo_bh_mass(host%baryon_halo,component='hot') .le. 0.d0) return ! no hot gas in the host halo
         
@@ -812,12 +816,13 @@ contains
         end if
         !
     end if
-! -------------------------------------------------
-#endif
 
     return
   end subroutine halo_compute_stripping_rate
-  
+! -------------------------------------------------
+#endif  
+! SUB_STRIPPING
+
   !*****************************************************************************************************************
   
   function halo_baryonic_mass(h)
