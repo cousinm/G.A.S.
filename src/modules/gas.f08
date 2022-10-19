@@ -27,13 +27,19 @@ module gas_mod
         real(kind=8)              :: Eint     ! Internal energy of the gas (in code unit)
         real(kind=8), allocatable :: elts(:)  ! mass of main ISM elements (e.g H1, He, C12, N14, O16, Fe56)
     contains
-        procedure :: create         ! Create and initialize a gas object
-        procedure :: metalicity     ! Return the metalicity (mass fraction) of the gas
-        procedure :: signature      ! Return a gas signature.
-        procedure :: abundance      ! Compute and return the abundance of a specific element
-        procedure :: temperature    ! Return the mean temperature of the gas
-        procedure :: molecular_mass ! Return the mean molecular mass of the gas
-        procedure :: setTemperature ! Set the internal energy according to the temperature and the mass
+        procedure :: create => gas_create     ! Create and initialize a gas object
+        procedure :: delete => gas_delete     ! Delete a gas object
+        procedure :: isValid => gas_isValid   ! Test is gas object is valid
+        procedure :: test => gas_test         ! Test concistency of the gas object
+        procedure :: copy => gas_copy         ! Copy a gas object from an other
+        procedure :: add => gas_add           ! Add a gas object
+        procedure :: sub => gas_sub           ! Substract a gas object
+        procedure :: metalicity               ! Return the metalicity (mass fraction) of the gas
+        procedure :: signature                ! Return a gas signature.
+        procedure :: abundance                ! Compute and return the abundance of a specific element
+        procedure :: temperature              ! Return the mean temperature of the gas
+        procedure :: molecular_mass           ! Return the mean molecular mass of the gas
+        procedure :: setTemperature           ! Set the internal energy according to the temperature and the mass
     end type gas
 
     ! Define gas specific parameters
@@ -53,15 +59,15 @@ module gas_mod
     ! INTERFACE OPERATOR DECLARATIONS
 
     interface assignment (=)  ! allows to copy a gas component by using the symbol '='
-        module procedure gas_copy
+        module procedure copy
     end interface assignment (=)
 
     interface operator (+)  ! allows to add two gas components by using the symbol '+'
-        module procedure gas_add
+        module procedure add
     end interface operator (+)
 
     interface operator (-)  ! allows to substract a gas component to an other by using the symbol '-'
-        module procedure gas_sub
+        module procedure sub
     end interface operator (-)
 
     interface operator (*)  ! allows to ponderate a gas component (a* or *a) by using the symbol '*'
@@ -108,7 +114,7 @@ contains
         ! Read and load data
         do
             read(gasPropertiesUnit, '(a)', end=2) line
-            if (trim(line) .eq. 'START') then
+            if (trim(line) .eq. '----') then
                 ! The number main ISM elements followed, the number of Metallicity bin used
                 read(gasPropertiesUnit, *) nElts, nMetBins 
                 call log_message('gas properties used: ', &
@@ -158,7 +164,7 @@ contains
     end subroutine gas_read_properties
 
     ! **********************************
-    subroutine create(this)
+    subroutine gas_create(this)
     
         ! Create a new gas object, initialize all fields to 0.
 
@@ -171,7 +177,92 @@ contains
         allocate(this%elts(nElts))  ! create
         this%elts = 0.  ! Specific element mass
     
-    end subroutine
+    end subroutine gas_create
+
+    ! **********************************
+    subroutine gas_delete(this)
+    
+        ! Delete a gas object
+
+        class(gas) :: this
+        
+        this%mass = 0.  ! Total mass
+        this%mZ  = 0.   ! Metal mass
+        this%Eint = 0.  ! Internal energy
+        
+        if (allocated(this%elts)) then
+            deallocate(this%elts)  ! Delete
+        end if
+    
+    end subroutine gas_delete
+
+    ! **********************************
+    subroutine gas_test(this, calledBy)
+
+        ! Test a gas component
+        !    After evolution, mass should be > 0. for all component
+        !    Total internal energy should be > 0. too
+
+        integer(kind=4)                     :: e
+
+        character(MAXPATHSIZE)              :: message
+        character(MAXPATHSIZE), intent(in)  :: calledBy
+
+        class(gas)                          :: this
+
+        ! Test mass
+        if (this%mass < 0.) then
+            write(message, '(a)') 'Current mass is not valid.'
+            call log_message(message, &
+                             logLevel=LOG_ERROR, &
+                             paramNames=(/'this%mass                ', &
+                                          'this%mZ                  ', &
+                                          'this%Eint                '/), &
+                             realParams=(/this%mass,this%mZ,this%Eint/), &
+                             calledBy=calledBy)
+        end if
+        !
+        ! Test metal mass
+        if (this%mZ < 0.) then
+            write(message, '(a)') 'Current metal mass is not valid.'
+            call log_message(message, &
+                             logLevel=LOG_ERROR, &
+                             paramNames=(/'this%mass                ', &
+                                          'this%mZ                  ', &
+                                          'this%Eint                '/), &
+                             realParams=(/this%mass,this%mZ,this%Eint/), &
+                             calledBy=calledBy)
+        end if
+        !
+        ! Test specific element mass
+        do e = 1, nElts
+            if (this%elts(e) < 0.) then
+                write(message, '(a,a,a)') 'Current ', eltNames(e), ' mass is not valid.'
+                call log_message(message, &
+                                 logLevel=LOG_ERROR, &
+                                 paramNames=(/'this%mass                ', &
+                                              'this%mZ                  ', &
+                                              'this%Eint                ', &
+                                              'this%elts(e)             '/), &
+                                 realParams=(/this%mass,this%mZ,this%Eint,this%elts(e)/), &
+                                 calledBy=calledBy)
+                
+            end if
+        end do
+        !
+        ! Test internal Energy
+        if (this%Eint < 0.) then
+            write(message, '(a)') 'Current total internal ernergy is not valid.'
+            call log_message(message, &
+                             logLevel=LOG_ERROR, &
+                             paramNames=(/'this%mass                ', &
+                                          'this%mZ                  ', &
+                                          'this%Eint                '/), &
+                             realParams=(/this%mass,this%mZ,this%Eint/), &
+                             calledBy=calledBy)
+        end if
+
+    end subroutine gas_test
 
     ! **********************************
     subroutine gas_copy(g1, g2)
@@ -179,32 +270,80 @@ contains
         ! Copy the gas object g2 into the gas object g1
     
         implicit none
-    
-        class(gas), intent(inout) :: g1
-        type(gas), intent(in)     :: g2
-        
-        ! Create g1
-        call g1%create()
+
+        type(gas), intent(in)            :: g2
+
+        class(gas), intent(inout)        :: g1
+
+        if (.not. g1%isValid()) then
+            ! Create g1
+            call g1%create()
+        end if
 
         ! Copy fields
         g1%mass = g2%mass  ! Total mass
         g1%mZ   = g2%mZ    ! Metal mass
         g1%Eint = g2%Eint  ! Internal energy
-        
-        ! Test if specific element array is allocated
-        if (.not. allocated(g2%elts)) then
-            call log_message('Try to copy an non allocated gas%elts component', &
-                             logLevel=LOG_ERROR, &
-                             paramNames=(/'g2%mass                  ', &
-                                          'g2%mZ                    ', &
-                                          'g2%Eint                  '/), &
-                             realParams=(/g2%mass,g2%mZ,g2%Eint/), &
-                             calledBy='gas_copy')
-        end if
-        g1%elts = g2%elts  ! copy
+        g1%elts = g2%elts  ! Specific element mass
 
         return
     end subroutine gas_copy
+
+    ! **********************************
+    subroutine copy(g1, g2)
+
+        ! Interface procedure to copy
+
+        implicit none
+
+        type(gas), intent(in)      :: g2
+        class(gas), intent(inout)  :: g1
+
+        call gas_copy(g1, g2)
+
+    end subroutine copy
+
+    ! **********************************
+    subroutine gas_add(this, g)
+
+        ! Add the gas object g to the current gas object (this = this - g)
+        ! For this procedure, this AND g have to be both created
+    
+        implicit none
+
+        type(gas), intent(in)  :: g
+
+        class(gas)             :: this
+
+        ! Add
+        ! Add fields from input gas objects
+        this%mass = this%mass + g%mass  ! Total mass
+        this%mZ   = this%mZ + g%mZ      ! Metal mass
+        this%Eint = this%Eint + g%Eint  ! Internal energy
+        this%elts = this%elts + g%elts  ! Specific element mass
+
+    end subroutine gas_add
+
+    ! **********************************
+    subroutine gas_sub(this, g)
+
+        ! Substract a gas object g to the current gas object (this = this - g)
+        ! For this procedure, this AND g have to be both created
+
+        implicit none
+
+        type(gas), intent(in)            :: g
+
+        class(gas)                       :: this
+
+        ! @ this point all checks have been done, we can substract g to this
+        ! Substract
+        this%mass = this%mass - g%mass  ! Total mass
+        this%mZ   = this%mZ - g%mZ      ! Metal mass
+        this%Eint = this%Eint - g%Eint  ! Internal energy
+        this%elts = this%elts - g%elts  ! Specific element mass
+
+    end subroutine gas_sub
 
     ! **********************************
     subroutine setTemperature(this, T)
@@ -214,11 +353,15 @@ contains
 
         implicit none
 
-        class(gas)                :: this
+        character(MAXPATHSIZE)           :: calledBy
 
-        real(kind=8), intent(in)  :: T      ! The temperature [K]
-        real(kind=8)              :: eint   ! Internal energy per particle
-        real(kind=8)              :: mu     ! mean molecular mass
+        real(kind=8), intent(in)         :: T      ! The temperature [K]
+        real(kind=8)                     :: eint   ! Internal energy per particle
+        real(kind=8)                     :: mu     ! mean molecular mass
+
+        class(gas)                       :: this
+
+        write(calledBy, '(a)') 'setTemperature'
 
         ! The temperature allows to define the internal energy per particle
         eint = 3.d0 / 2.d0 * kb * T  ! [Joule]
@@ -227,25 +370,57 @@ contains
         ! the mean molecular mass
 
         mu = this%molecular_mass()
-        if (mu > 0.) then
-            this%Eint = eint * this%mass * Mass_kg / (mu * mp)  ! [Joule]
-            this%Eint = this%Eint * Energy_CU                   ! [CU]
-        else
-            call log_message('Unvalid mean molecular mass', &
-                             logLevel=LOG_ERROR, &
-                             paramNames=(/'mu                       ', &
-                                          'this%mass                ', &
-                                          'this%mZ                  ', &
-                                          'this%Eint                '/), &
-                             realParams=(/mu,this%mass,this%mZ,this%Eint/), &
-                             calledBy='setTemperature')
-        end if
-
+        this%Eint = eint * this%mass * Mass_kg / (mu * mp)  ! [Joule]
+        this%Eint = this%Eint * Energy_CU                   ! [CU]
     end subroutine setTemperature
 
     !
     ! FUNCTIONS
     !
+
+    ! **********************************
+    function gas_isValid(this) result(isValid)
+
+        ! Test the validity of a gas object
+
+        logical     :: isValid
+
+        class(gas)  :: this
+
+        isValid = allocated(this%elts)
+    end function gas_isValid
+
+    ! **********************************
+    function add(g1, g2) result(g)
+
+        implicit none
+
+        type(gas), intent(in)  :: g1
+        type(gas), intent(in)  :: g2
+        type(gas)              :: g
+
+        ! Create the output gas object
+        call g%create()
+        call g%add(g1)
+        call g%add(g2)
+
+    end function add
+
+    ! **********************************
+    function sub(g1, g2) result(g)
+
+        implicit none
+
+        type(gas), intent(in)  :: g1
+        type(gas), intent(in)  :: g2
+        type(gas)              :: g
+
+        ! Create the output gas object
+        call g%create()
+        call g%add(g1)
+        call g%sub(g2)
+
+    end function sub
 
     ! **********************************
     function metalicity(this) result(mZ)
@@ -270,11 +445,16 @@ contains
 
         implicit none
 
-        class(gas), intent(in)   :: this
         type(gas)                :: g
 
-        g = this
-        g = 1.d0/this%mass * g
+        class(gas), intent(in)   :: this
+
+        if (this%mass > 0.d0) then
+            ! Compute gas signature
+            g = 1.d0/this%mass * this
+        else
+            g = this
+        end if
 
     end function signature
 
@@ -293,17 +473,6 @@ contains
         real(kind=8)             :: X
 
         class(gas), intent(in)   :: this
-
-        ! Test if the total mass is valid
-        if (this%mass <= 0.d0) then
-            call log_message('Try to compute abundance of a null mass gas', &
-                             logLevel=LOG_ERROR, &
-                             paramNames=(/'this%mass                ', &
-                                          'this%mZ                  ', &
-                                          'this%Eint                '/), &
-                             realParams=(/this%mass,this%mZ,this%Eint/), &
-                             calledBy='gas%abundance()')  
-        end if
 
         ! Loop oven specific element and compute abundance
         X = -1.d0
@@ -389,169 +558,12 @@ contains
     end function temperature
 
     ! **********************************
-    function gas_add(g1, g2) result(g)
-
-        ! Add the gas object g2 to the gas object g1
-        ! For this procedure, g1 AND g2 havr to be both created
-    
-        implicit none
-    
-        type(gas), intent(in)     :: g1
-        type(gas), intent(in)     :: g2
-        type(gas)                 :: g
-
-        ! Test if specific element array is allocated
-        ! for g1
-        if (.not. allocated(g1%elts)) then
-            call log_message('Try to use an non allocated gas%elts component', &
-                             logLevel=LOG_ERROR, &
-                             paramNames=(/'g1%mass                  ', &
-                                          'g1%mZ                    ', &
-                                          'g1%Eint                  '/), &
-                             realParams=(/g1%mass,g1%mZ,g1%Eint/), &
-                             calledBy='gas_add')
-        end if
-        ! and for g2
-        if (.not. allocated(g2%elts)) then
-            call log_message('Try to use an non allocated gas%elts component', &
-                             logLevel=LOG_ERROR, &
-                             paramNames=(/'g2%mass                  ', &
-                                          'g2%mZ                    ', &
-                                          'g2%Eint                  '/), &
-                             realParams=(/g2%mass,g2%mZ,g2%Eint/), &
-                             calledBy='gas_add')
-        end if
-        
-        ! Create the return gas object
-        call g%create()
-        ! Add
-        ! Add fields from input gas objects
-        g%mass = g1%mass + g2%mass  ! Total mass
-        g%mZ   = g1%mZ + g2%mZ      ! Metal mass
-        g%Eint = g1%Eint + g2%Eint  ! Internal energy
-        g%elts = g1%elts + g2%elts  ! Specific element mass
-
-        return
-    end function gas_add
-
-    ! **********************************
-    function gas_sub(g1, g2) result(g)
-
-        ! Substract a gas object g2 to the gas object g1 (g = g1 - g2)
-
-        implicit none
-
-        integer(kind=4)           :: e
-
-        character(MAXPATHSIZE)    :: message
-
-        type(gas), intent(in)     :: g1
-        type(gas), intent(in)     :: g2
-        type(gas)                 :: g
-
-        ! Test total mass of components
-        if ((g2%mass .gt. g1%mass) .and. (abs(g2%mass - g1%mass) .gt. num_accuracy)) then
-            call log_message('Substract too much gas', &
-                             logLevel=LOG_ERROR, &
-                             paramNames=(/'g1%mass                  ', &
-                                          'g1%mZ                    ', &
-                                          'g1%Eint                  ', &
-                                          'g2%mass                  ', &
-                                          'g2%mZ                    ', &
-                                          'g2%Eint                  '/), &
-                             realParams=(/g1%mass,g1%mZ,g1%Eint,g2%mass,g2%mZ,g2%Eint/), &
-                             calledBy='gas_sub')
-        end if
-
-        ! Test metal mass of components
-        if ((g2%mZ .gt. g1%mZ) .and. (abs(g2%mZ - g1%mZ) .gt. num_accuracy)) then
-            call log_message('Substract too much gas', &
-                             logLevel=LOG_ERROR, &
-                             paramNames=(/'g1%mass                  ', &
-                                          'g1%mZ                    ', &
-                                          'g1%Eint                  ', &
-                                          'g2%mass                  ', &
-                                          'g2%mZ                    ', &
-                                          'g2%Eint                  '/), &
-                             realParams=(/g1%mass,g1%mZ,g1%Eint,g2%mass,g2%mZ,g2%Eint/), &
-                             calledBy='gas_sub')
-        end if
-
-        ! Test total internal energy of components
-        if ((g2%Eint .gt. g1%Eint) .and. (abs(g2%Eint - g1%Eint) .gt. num_accuracy)) then
-            call log_message('Substract too much total internal energy', &
-                             logLevel=LOG_ERROR, &
-                             paramNames=(/'g1%mass                  ', &
-                                          'g1%mZ                    ', &
-                                          'g1%Eint                  ', &
-                                          'g2%mass                  ', &
-                                          'g2%mZ                    ', &
-                                          'g2%Eint                  '/), &
-                             realParams=(/g1%mass,g1%mZ,g1%Eint,g2%mass,g2%mZ,g2%Eint/), &
-                             calledBy='gas_sub')
-        end if
-
-        ! Test if specific element array is allocated
-        ! for g1
-        if (.not. allocated(g1%elts)) then
-            call log_message('Try to use an non allocated gas%elts component', &
-                             logLevel=LOG_ERROR, &
-                             paramNames=(/'g1%mass                  ', &
-                                          'g1%mZ                    ', &
-                                          'g1%Eint                  '/), &
-                             realParams=(/g1%mass,g1%mZ,g1%Eint/), &
-                             calledBy='gas_sub')
-        end if
-        ! and for g2
-        if (.not. allocated(g2%elts)) then
-            call log_message('Try to use an non allocated gas%elts component', &
-                             logLevel=LOG_ERROR, &
-                             paramNames=(/'g2%mass                  ', &
-                                          'g2%mZ                    ', &
-                                          'g2%Eint                  '/), &
-                             realParams=(/g2%mass,g2%mZ,g2%Eint/), &
-                             calledBy='gas_sub')
-        end if
-
-        ! @ this point specific element array are available
-        do e = 1, nElts
-            if ((g1%elts(e) < g2%elts(e)) .and. (abs(g2%elts(e) - g1%elts(e)) .gt. num_accuracy)) then
-                write(message, '(a,a)') 'Substract too much gas for the specific element e = ', eltNames(e)
-                call log_message(message, &
-                                 logLevel=LOG_ERROR, &
-                                 paramNames=(/'g1%mass                  ', &
-                                              'g1%mZ                    ', &
-                                              'g1%Eint                  ', &
-                                              'g1%elts(e)               ', &
-                                              'g2%mass                  ', &
-                                              'g2%mZ                    ', &
-                                              'g2%Eint                  ', &
-                                              'g2%elts(e)               '/), &
-                                 realParams=(/g1%mass,g1%mZ,g1%Eint,g1%elts(e), &
-                                              g2%mass,g2%mZ,g2%Eint,g2%elts(e)/), &
-                                 calledBy='gas_sub')
-                
-            end if
-        end do
-
-        ! @ this point all checks have been done, we can substract g2 to g1
-        ! Create the return gas object
-        call g%create()
-        ! Substract
-        g%mass = max(0., g1%mass - g2%mass)  ! Total mass
-        g%mZ   = max(0., g1%mZ - g2%mZ)      ! Metal mass
-        g%Eint = max(0., g1%Eint - g2%Eint)  ! Internal energy
-        g%elts = max(0., g1%elts - g2%elts)  ! Specific element mass
-
-    end function gas_sub
-
-    ! **********************************
     function gas_scalar_multiply_left(g, a) result(ga)
 
         ! Return gas * a
     
         implicit none
-    
+
         real(kind=8), intent(in)  :: a
     
         type(gas), intent(in)     :: g
@@ -560,21 +572,11 @@ contains
         ! Create the return gas object
         call ga%create()
     
-        ga%mass  = g%mass * a
-        ga%mZ    = g%mZ   * a
-        ga%Eint  = g%Eint * a
-    
-        if (allocated(g%elts)) then
-           ga%elts = g%elts * a
-        else
-            call log_message('Try to use an non allocated gas%elts component', &
-                             logLevel=LOG_ERROR, &
-                             paramNames=(/'g%mass                   ', &
-                                          'g%mZ                     ', &
-                                          'g%Eint                   '/), &
-                            realParams=(/g%mass,g%mZ,g%Eint/), &
-                            calledBy='gas_scalar_multiply_left')
-        endif
+        ga%mass = g%mass * a
+        ga%mZ   = g%mZ   * a
+        ga%Eint = g%Eint * a
+        ga%elts = g%elts * a
+
     end function gas_scalar_multiply_left
 
     ! **********************************

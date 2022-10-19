@@ -38,9 +38,6 @@ contains
         write(filename,'(a, a)') trim(logPath), '/gas_tests.log'
         open(unit=u, file=filename, status='new')
 
-        ! Initialize the gas module
-        call gas_init()
-
         isValid = test_gas_create()
         write(u, '(a,l)') 'gas_create: ', isValid
 
@@ -190,7 +187,7 @@ contains
 
         ! Test the gas add procedure
         ! Start from a empty gas and add the initial composition
-        ! Of the hiest metalicity bin (all elements mass > 0.)
+        ! Of the highest metalicity bin (all elements mass > 0.)
 
         implicit none
 

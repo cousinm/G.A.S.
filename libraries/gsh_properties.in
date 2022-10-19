@@ -1,0 +1,13 @@
+# New G.A.S. format
+# gas structuraiton history (gsh) properties
+# This file contains all properties associated to the gsh module
+# it is build as follow:
+# Number of traking scales (nScales), the stepping factor (stepFactor)
+# Star formation scale [pc] (lStar)
+# Specific velocity dizspersion at star formation scale [km/s]
+# Specific mass surface density at formation scale [Msun/pc^2], scaling relation slope (a)
+----
+20, 2.0
+0.1
+0.3
+150.0, 0.2

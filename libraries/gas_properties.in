@@ -6,7 +6,7 @@
 # Main ISM element identification H1, He4, C12, N14, O16, Fe56
 # initial abundances (mass fraction) associated to each metallicity bin and each main ISM element 
 #   For a data line of initial abundance data are stucturated as follow: MetBins X0_H1 X0_He4 X0_C12 X0_N14  X0_O16 X0_Fe56
-START
+----
 6   7
 H1 He4 C12 N14 O16 Fe56
    0.00000000e+00   7.70000000e-01   2.30000000e-01   0.00000000e+00   0.00000000e+00   0.00000000e+00   0.00000000e+00

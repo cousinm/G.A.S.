@@ -1,4 +1,4 @@
-# GAS configuration file
+# GAS environment configuration file
 # COUSIN Morgane
 #
 logPath       =../logs                                                ! Log directory path

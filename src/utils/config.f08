@@ -10,7 +10,7 @@ module config_mod
     !*****************************************************************************************************************
 
     use parameters  ! Acces to global defintions and properties
-    use log_mod     ! 
+    use log_mod     ! Acces to logging procedures
 
     implicit none
 
@@ -34,7 +34,7 @@ contains
     ! **********************************
     subroutine config_init()
 
-        ! Initialize the GAS configuration
+        ! Initialize the GAS environment configuration
 
         implicit none
 
@@ -98,13 +98,12 @@ contains
         !
 2       close(11)
         !
-        write(message, '(a,a)') 'Read configuration file : ', trim(filename)
-        call log_message(message)
-        write(message,'(a)') new_line('a')//'| PATH'//new_line('a')// &
-                             '|> logPath         : '//trim(lPath)//new_line('a')// &
-                             '|> librariesPath   : '//trim(librariesPath)//new_line('a')// &
-                             '|> treesPath       : '//trim(treesPath)//new_line('a')// &
-                             '|> outputPath      : '//trim(outputPath)
+        write(message, '(a,a)') 'Read configuration file : ', trim(filename)//new_line('a')// &
+                                '| PATH'//new_line('a')// &
+                                '|> logPath         : '//trim(lPath)//new_line('a')// &
+                                '|> librariesPath   : '//trim(librariesPath)//new_line('a')// &
+                                '|> treesPath       : '//trim(treesPath)//new_line('a')// &
+                                '|> outputPath      : '//trim(outputPath)//new_line('a')
         call log_message(message)
     end subroutine config_read_main_configuration_file
 
