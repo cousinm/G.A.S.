@@ -9,6 +9,7 @@ module gsh_tests_mod
     !*****************************************************************************************************************
 
     use gsh_mod    ! Acces to gas structuration history module
+    use config_mod ! Acces to configurations parameters (path)
     use log_mod    ! Acces to logging procedures
 
     implicit none
@@ -35,7 +36,7 @@ contains
         character(MAXPATHSIZE)     :: filename
 
         ! Open log file for these tests
-        write(filename,'(a, a)') trim(logPath), '/gsh_tests.log'
+        write(filename,'(a, a)') trim(validPath), '/gsh_tests.log'
         open(unit=u, file=filename, status='new')
 
         isValid = test_gsh_create()
@@ -127,15 +128,15 @@ contains
         call gs%create()
 
         ! Open data file for this test
-        write(filename,'(a, a)') trim(logPath), '/gsh_test_constant_injection.dat'
+        write(filename,'(a, a)') trim(validPath), '/gsh_test_constant_injection.dat'
         open(unit=u, file=filename, status='new')
 
         ! Evolution
         is = gsh_l2i(l)
         t = 0.d0 ! init
-        write(u, '(a)') 'nClouds(nScale) | nClouds(1) | mass(nScales) | mass(1)'
+        write(u, '(a)') 'mass | nClouds(nScale) | nClouds(1) | mass(nScales) | mass(1)'
         do while (t < evolTime)
-            write(u, *) gs%cascade(is)%nClouds(), gs%cascade(1)%nClouds(), &
+            write(u, *) gs%mass, gs%cascade(is)%nClouds(), gs%cascade(1)%nClouds(), &
                         gs%cascade(is)%gas%mass, gs%cascade(1)%gas%mass
             call gs%solve(dt, inRate, l)
             t = t + dt

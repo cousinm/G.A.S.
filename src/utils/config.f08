@@ -20,6 +20,7 @@ module config_mod
     integer(kind=4), parameter   :: inputParameterFileUnit = 110  ! Used to read input parameter file
 
     ! Main directories path
+    character(MAXPATHSIZE)       :: validPath
     character(MAXPATHSIZE)       :: librariesPath
     character(MAXPATHSIZE)       :: stellarPopulationPath
     character(MAXPATHSIZE)       :: treesPath
@@ -81,9 +82,11 @@ contains
             select case (trim(name))
                 !
                 case ('logPath')
-                    read(val, '(a)') lPath          ! tree files path
+                    read(val, '(a)') lPath          ! log files path
                     ! Init log file using lPath
                     call log_init(lPath)
+                case ('validPath')
+                    read(val, '(a)') validPath      ! validation files path (test logs and dat)
                 !
                 case ('librariesPath')
                     read(val, '(a)') librariesPath  ! libraries input path

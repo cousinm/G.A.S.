@@ -9,6 +9,7 @@ module gas_tests_mod
     !*****************************************************************************************************************
 
     use gas_mod    ! Acces to gas module
+    use config_mod ! Acces to configurations parameters (path)
     use log_mod    ! Acces to logging procedures
 
     implicit none
@@ -35,7 +36,7 @@ contains
         character(MAXPATHSIZE)     :: filename
 
         ! Open log file for these tests
-        write(filename,'(a, a)') trim(logPath), '/gas_tests.log'
+        write(filename,'(a, a)') trim(validPath), '/gas_tests.log'
         open(unit=u, file=filename, status='new')
 
         isValid = test_gas_create()

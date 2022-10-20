@@ -9,6 +9,7 @@ module scale_tests_mod
     !*****************************************************************************************************************
 
     use parameters ! Acces to global defintions and properties
+    use config_mod ! Acces to configurations parameters (path)
     use scale_mod  ! Acces to scale properties and procedures
     use log_mod    ! Acces to logging procedures
 
@@ -36,7 +37,7 @@ contains
         character(MAXPATHSIZE)     :: filename
 
         ! Open log file for these tests
-        write(filename,'(a, a)') trim(logPath), '/scale_tests.log'
+        write(filename,'(a, a)') trim(validPath), '/scale_tests.log'
         open(unit=u, file=filename, status='new')
 
         isValid = test_scale_constant_injection()
@@ -79,7 +80,7 @@ contains
         call scl%create(l)
 
         ! Open data file for this test
-        write(filename,'(a, a)') trim(logPath), '/scale_test_constant_injection.dat'
+        write(filename,'(a, a)') trim(validPath), '/scale_test_constant_injection.dat'
         open(unit=u, file=filename, status='new')
 
         ! Evolution

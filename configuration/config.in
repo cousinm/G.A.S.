@@ -2,6 +2,7 @@
 # COUSIN Morgane
 #
 logPath       =../logs                                                ! Log directory path
+validPath     =../validation                                          ! Validation directory path
 librariesPath =../libraries                                           ! Libraries directory path                   
 treesPath     =/mnt/GAS_DATA1/input/wmap-5/oversampling_linked_trees  ! Tree files input directory path                  
 outputPath    =/mnt/GAS_DATA2/Horizon/wmap-5/output/Tests             ! Output directory path
