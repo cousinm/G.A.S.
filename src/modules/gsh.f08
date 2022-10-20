@@ -140,7 +140,7 @@ contains
 
     end subroutine gsh_copy_
 
-        ! **********************************
+    ! **********************************
     subroutine gsh_solve(this, dt, inRate, l)
 
         ! Solve the evolution of the current gas structuration
@@ -287,7 +287,8 @@ contains
         character(MAXPATHSIZE)              :: calledBy
 
         real(kind=8), intent(in)            :: l           ! The injection scale
-        real(kind=8), intent(in)            :: dt      
+        real(kind=8), intent(in)            :: dt          ! The time-step
+        real(kind=8)                        :: mass        ! The updated total mass of the gsh
 
         type(gas), intent(in)               :: inRate      ! The input rate
         type(gas), intent(in), allocatable  :: outRates(:) ! The set of output rates
@@ -307,6 +308,7 @@ contains
         is = gsh_l2i(l)
         !
         ! Loop over scales from the largest to the lowest
+        mass = 0. ! Init the total mass
         do s = nScales, 1, -1
             !
             ! Largest scale case, no input from larger scale, only external input
@@ -322,7 +324,12 @@ contains
             ! Apply evolution at scale s
             gs%cascade(s) = this%cascade(s)%evolve(dt, sInRate, outRates(s))
             !
+            ! Update total mass
+            mass = mass + gs%cascade(s)%gas%mass
         end do
+        !
+        ! Set new total gas mass
+        gs%mass = mass
         !
         ! sInRate is delete
         call sInRate%delete()

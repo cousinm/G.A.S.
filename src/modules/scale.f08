@@ -30,7 +30,7 @@ module scale_mod
         procedure   :: copy => scale_copy                   ! Copy a scale object
         procedure   :: add => scale_add                     ! Add gas to the scale
         procedure   :: sub => scale_sub                     ! Substract gas to the scale
-        procedure   :: test => scale_test                   ! Test the validity of the scale
+        procedure   :: isValid => scale_isValid             ! Test the validity of the scale
         procedure   :: nClouds => scale_get_N_clouds        ! Get the number of active clouds at this scale
         procedure   :: BE_mass => scale_get_BE_mass         ! Get the Bonnor Ebert Mass associated to the scale
         procedure   :: volume => scale_volume               ! Get the volume of a sphere at the scale
@@ -172,21 +172,19 @@ contains
     end subroutine
 
     ! **********************************
-    subroutine scale_test(this, from)
+    subroutine scale_isValid(this, calledBy)
 
         ! Test a scale component
         !    After evolution, scale%l should be > 0
-        !    The gas component should be valid
+        !    The gas component should also be valid
 
         implicit none
 
         character(MAXPATHSIZE)              :: message
-        character(MAXPATHSIZE)              :: calledBy
-        character(MAXPATHSIZE), intent(in)  :: from
+        character(MAXPATHSIZE), intent(in)  :: calledBy
 
         class(scale)                        :: this
 
-        write(calledBy, '(a)') 'scale_test'
         ! Test scale value
         if (this%l < 0.) then
             write(message, '(a)') 'Current scale is not valid.'
@@ -194,13 +192,13 @@ contains
                              logLevel=LOG_ERROR, &
                              paramNames=(/'this%l                   '/), &
                              realParams=(/this%l/), &
-                             calledBy=log_calledBy(calledBy, from))
+                             calledBy=log_calledBy('scale_test', calledBy))
         end if
         !
         ! Test gas component of the scale
-        call this%gas%test(log_calledBy(calledBy, from))
+        call this%gas%isValid(log_calledBy('scale_test', calledBy))
 
-    end subroutine scale_test
+    end subroutine scale_isValid
 
     ! **********************************
     subroutine scale_solve(this, dt, inRate)
@@ -387,7 +385,7 @@ contains
         !
         ! Test the validity of the current scale
         write(calledBy, '(a)') 'scale_evolve'
-        call scl%test(calledBy)
+        call scl%isValid(calledBy)
 
     end function scale_evolve
 

@@ -176,17 +176,11 @@ contains
 
         implicit none
 
-        character(MAXPATHSIZE), intent(in), optional  :: calledBy
-        character(MAXPATHSIZE), intent(in), optional  :: from
-        character(MAXPATHSIZE)                        :: log_calledBy
+        character(*), intent(in)           :: calledBy
+        character(MAXPATHSIZE), intent(in) :: from
+        character(MAXPATHSIZE)             :: log_calledBy
 
-        write(log_calledBy, *) ''
-        if (present(calledBy)) then
-            write(log_calledBy, *) trim(calledBy)
-        end if
-        if (present(from)) then
-            write(log_calledBy, *) trim(log_calledBy), new_line('a')//'From ', trim(from)
-        end if
+        write(log_calledBy, *) trim(calledBy), new_line('a')//'From ', trim(from)
 
     end function log_calledBy
 

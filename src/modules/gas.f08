@@ -22,24 +22,24 @@ module gas_mod
     ! GAS TYPE DEFINITION
 
     type gas
-        real(kind=8)              :: mass     ! total mass  (in code unit)
-        real(kind=8)              :: mZ       ! mass of metals (in code unit)
-        real(kind=8)              :: Eint     ! Internal energy of the gas (in code unit)
-        real(kind=8), allocatable :: elts(:)  ! mass of main ISM elements (e.g H1, He, C12, N14, O16, Fe56)
+        real(kind=8)              :: mass       ! total mass  (in code unit)
+        real(kind=8)              :: mZ         ! mass of metals (in code unit)
+        real(kind=8)              :: Eint       ! Internal energy of the gas (in code unit)
+        real(kind=8), allocatable :: elts(:)    ! mass of main ISM elements (e.g H1, He, C12, N14, O16, Fe56)
     contains
-        procedure :: create => gas_create     ! Create and initialize a gas object
-        procedure :: delete => gas_delete     ! Delete a gas object
-        procedure :: isValid => gas_isValid   ! Test is gas object is valid
-        procedure :: test => gas_test         ! Test concistency of the gas object
-        procedure :: copy => gas_copy         ! Copy a gas object from an other
-        procedure :: add => gas_add           ! Add a gas object
-        procedure :: sub => gas_sub           ! Substract a gas object
-        procedure :: metalicity               ! Return the metalicity (mass fraction) of the gas
-        procedure :: signature                ! Return a gas signature.
-        procedure :: abundance                ! Compute and return the abundance of a specific element
-        procedure :: temperature              ! Return the mean temperature of the gas
-        procedure :: molecular_mass           ! Return the mean molecular mass of the gas
-        procedure :: setTemperature           ! Set the internal energy according to the temperature and the mass
+        procedure :: create => gas_create       ! Create and initialize a gas object
+        procedure :: delete => gas_delete       ! Delete a gas object
+        procedure :: isCreated => gas_isCreated ! Test is gas object is already created
+        procedure :: isValid => gas_isValid           ! Test concistency of the gas object
+        procedure :: copy => gas_copy           ! Copy a gas object from an other
+        procedure :: add => gas_add             ! Add a gas object
+        procedure :: sub => gas_sub             ! Substract a gas object
+        procedure :: metalicity                 ! Return the metalicity (mass fraction) of the gas
+        procedure :: signature                  ! Return a gas signature.
+        procedure :: abundance                  ! Compute and return the abundance of a specific element
+        procedure :: temperature                ! Return the mean temperature of the gas
+        procedure :: molecular_mass             ! Return the mean molecular mass of the gas
+        procedure :: setTemperature             ! Set the internal energy according to the temperature and the mass
     end type gas
 
     ! Define gas specific parameters
@@ -197,10 +197,11 @@ contains
     end subroutine gas_delete
 
     ! **********************************
-    subroutine gas_test(this, calledBy)
+    subroutine gas_isValid(this, calledBy)
 
         ! Test a gas component
-        !    After evolution, mass should be > 0. for all component
+        !    gas%elts should be allocated
+        !    Mass should be > 0. for all components
         !    Total internal energy should be > 0. too
 
         integer(kind=4)                     :: e
@@ -225,6 +226,18 @@ contains
         ! Test metal mass
         if (this%mZ < 0.) then
             write(message, '(a)') 'Current metal mass is not valid.'
+            call log_message(message, &
+                             logLevel=LOG_ERROR, &
+                             paramNames=(/'this%mass                ', &
+                                          'this%mZ                  ', &
+                                          'this%Eint                '/), &
+                             realParams=(/this%mass,this%mZ,this%Eint/), &
+                             calledBy=calledBy)
+        end if
+        !
+        ! Test if elts is allocated
+        if (.not. allocated(this%elts)) then
+            write(message, *) 'Structure this%elts is not allocated'
             call log_message(message, &
                              logLevel=LOG_ERROR, &
                              paramNames=(/'this%mass                ', &
@@ -262,7 +275,7 @@ contains
                              calledBy=calledBy)
         end if
 
-    end subroutine gas_test
+    end subroutine gas_isValid
 
     ! **********************************
     subroutine gas_copy(g1, g2)
@@ -275,7 +288,7 @@ contains
 
         class(gas), intent(inout)        :: g1
 
-        if (.not. g1%isValid()) then
+        if (.not. g1%isCreated()) then
             ! Create g1
             call g1%create()
         end if
@@ -379,7 +392,7 @@ contains
     !
 
     ! **********************************
-    function gas_isValid(this) result(isValid)
+    function gas_isCreated(this) result(isValid)
 
         ! Test the validity of a gas object
 
@@ -388,7 +401,7 @@ contains
         class(gas)  :: this
 
         isValid = allocated(this%elts)
-    end function gas_isValid
+    end function gas_isCreated
 
     ! **********************************
     function add(g1, g2) result(g)
