@@ -10,7 +10,7 @@ module config_mod
     !*****************************************************************************************************************
 
     use parameters  ! Acces to global defintions and properties
-    use log_mod     ! 
+    use log_mod     ! Acces to logging procedures
 
     implicit none
 
@@ -20,6 +20,7 @@ module config_mod
     integer(kind=4), parameter   :: inputParameterFileUnit = 110  ! Used to read input parameter file
 
     ! Main directories path
+    character(MAXPATHSIZE)       :: validPath
     character(MAXPATHSIZE)       :: librariesPath
     character(MAXPATHSIZE)       :: stellarPopulationPath
     character(MAXPATHSIZE)       :: treesPath
@@ -34,7 +35,7 @@ contains
     ! **********************************
     subroutine config_init()
 
-        ! Initialize the GAS configuration
+        ! Initialize the GAS environment configuration
 
         implicit none
 
@@ -81,9 +82,11 @@ contains
             select case (trim(name))
                 !
                 case ('logPath')
-                    read(val, '(a)') lPath          ! tree files path
+                    read(val, '(a)') lPath          ! log files path
                     ! Init log file using lPath
                     call log_init(lPath)
+                case ('validPath')
+                    read(val, '(a)') validPath      ! validation files path (test logs and dat)
                 !
                 case ('librariesPath')
                     read(val, '(a)') librariesPath  ! libraries input path
@@ -98,13 +101,12 @@ contains
         !
 2       close(11)
         !
-        write(message, '(a,a)') 'Read configuration file : ', trim(filename)
-        call log_message(message)
-        write(message,'(a)') new_line('a')//'| PATH'//new_line('a')// &
-                             '|> logPath         : '//trim(lPath)//new_line('a')// &
-                             '|> librariesPath   : '//trim(librariesPath)//new_line('a')// &
-                             '|> treesPath       : '//trim(treesPath)//new_line('a')// &
-                             '|> outputPath      : '//trim(outputPath)
+        write(message, '(a,a)') 'Read configuration file : ', trim(filename)//new_line('a')// &
+                                '| PATH'//new_line('a')// &
+                                '|> logPath         : '//trim(lPath)//new_line('a')// &
+                                '|> librariesPath   : '//trim(librariesPath)//new_line('a')// &
+                                '|> treesPath       : '//trim(treesPath)//new_line('a')// &
+                                '|> outputPath      : '//trim(outputPath)//new_line('a')
         call log_message(message)
     end subroutine config_read_main_configuration_file
 

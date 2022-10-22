@@ -8,6 +8,7 @@ MAINDIR  = ./src/main/
 TESTSDIR = ./src/tests/
 BINDIR   = ./bin/
 LOGDIR   = ./logs/
+VALIDDIR = ./validation/
 PARAMFILE_DIR = ./param_files/
 PARAMFILE = GAS_param.in
 
@@ -40,18 +41,25 @@ clean:
 	rm -f $(LIBDIR)*~
 	rm -f $(MAINDIR)*~
 	rm -f $(LOGDIR)*.log
+	rm -f $(VALIDDIR)*.log
+	rm -f $(VALIDDIR)*.dat
 
 utils:
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)parameters.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)config.f08
+	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)model.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)PrDi.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)log.f08
 
 modules: 
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)gas.f08
+	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)scale.f08
+	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)gsh.f08
 
 test_modules:
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(TESTSDIR)gas_tests.f08
+	$(FORT) $(FFLAGS) $(OPTIONS) -c $(TESTSDIR)scale_tests.f08
+	$(FORT) $(FFLAGS) $(OPTIONS) -c $(TESTSDIR)gsh_tests.f08
 
 lib:
 	mv *.o ${BINDIR}

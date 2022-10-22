@@ -126,7 +126,7 @@ contains
             end if
         end if
 
-        write(u,'(a,a,a,a)') trim(currentTime), trim(space), trim(lLevel), trim(message)
+        write(u, *) trim(currentTime), trim(space), trim(lLevel), trim(message)
 
         if (present(paramNames)) then
             do i = 1, size(paramNames)
@@ -167,6 +167,21 @@ contains
         log_get_process_file_unit = logProcessUnit + myRank
         
         return
-      end function log_get_process_file_unit
+    end function log_get_process_file_unit
+    
+    ! **********************************
+    function log_calledBy(calledBy, from)
+
+        ! Format the calledBy message storing calling sequence
+
+        implicit none
+
+        character(*), intent(in)           :: calledBy
+        character(MAXPATHSIZE), intent(in) :: from
+        character(MAXPATHSIZE)             :: log_calledBy
+
+        write(log_calledBy, *) trim(calledBy), new_line('a')//'From ', trim(from)
+
+    end function log_calledBy
 
 end module log_mod

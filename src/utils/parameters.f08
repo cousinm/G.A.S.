@@ -43,10 +43,13 @@ module parameters
     real(kind=8), parameter    :: Mass_kg           = Mass2Msun*MSun      ! 1 mass code unit in kg (~ 1.989 10^41 kg)
     real(kind=8), parameter    :: kpc2m             = 3.0856776d19        ! 1 kpc in m
     real(kind=8), parameter    :: pc2cm             = 3.0856776d18        ! 1 pc in cm
+    real(kind=8), parameter    :: pc2kpc            = 1.d-3               ! 1 pc in kpc (CU)
     real(kind=8), parameter    :: kpc2cm            = kpc2m*1.d2          ! 1 kpc in cm 
     real(kind=8), parameter    :: kpc2km            = kpc2m*1.d-3         ! 1 kpc in km
+    real(kind=8), parameter    :: km2kpc            = 1.d0/kpc2km         ! 1 km in kpc
     real(kind=8), parameter    :: Mpc2km            = kpc2km*1.d3         ! 1 Mpc in km
     real(kind=8), parameter    :: Gyr2s             = 3.1556952d16        ! 1 Gyr in sec
+    real(kind=8), parameter    :: s2Gyr             = 1.d0/Gyr2s          ! 1 sec in Gyr
     real(kind=8), parameter    :: Gyr2yr            = 1.d9                ! 1 Gyr in yr
     real(kind=8), parameter    :: lightSpeed_CU     = lightSpeed_m_s*Gyr2s/kpc2m       ! Light Speed in code unit [kpc/Gyr] (~ 306601)
     real(kind=8), parameter    :: Energy_J          = Mass_kg*kpc2m**2./(Gyr2s**2.)    ! 1 CU energy (~ 1.90121 10^48 J)
@@ -57,5 +60,6 @@ module parameters
     real(kind=8), parameter    :: Velocity_km_s     = kpc2km/Gyr2s                     ! From CU [kpc/Gyr] to [km/s]
     real(kind=8), parameter    :: Velocity_m_s      = kpc2m/Gyr2s                      ! From CU [kpc/Gyr] to [m/s]
     real(kind=8), parameter    :: MassRate_Msun_Yr  = Mass2Msun/Gyr2yr                 ! From CU [10^11Msun/Gyr] to [Msun/yr]
+    real(kind=8), parameter    :: MassRate_CU       = 1.d0/MassRate_Msun_Yr            ! 1 Msun/yr in CU
 
 end module parameters

@@ -9,6 +9,7 @@ module gas_tests_mod
     !*****************************************************************************************************************
 
     use gas_mod    ! Acces to gas module
+    use config_mod ! Acces to configurations parameters (path)
     use log_mod    ! Acces to logging procedures
 
     implicit none
@@ -35,11 +36,8 @@ contains
         character(MAXPATHSIZE)     :: filename
 
         ! Open log file for these tests
-        write(filename,'(a, a)') trim(logPath), '/gas_tests.log'
+        write(filename,'(a, a)') trim(validPath), '/gas_tests.log'
         open(unit=u, file=filename, status='new')
-
-        ! Initialize the gas module
-        call gas_init()
 
         isValid = test_gas_create()
         write(u, '(a,l)') 'gas_create: ', isValid
@@ -190,7 +188,7 @@ contains
 
         ! Test the gas add procedure
         ! Start from a empty gas and add the initial composition
-        ! Of the hiest metalicity bin (all elements mass > 0.)
+        ! Of the highest metalicity bin (all elements mass > 0.)
 
         implicit none
 
