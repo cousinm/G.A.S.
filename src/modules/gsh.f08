@@ -20,15 +20,17 @@ module gsh_mod
     public
 
     type gsh
-        real(kind=8)             :: mass       ! Total mass of the structure
-        type(scale), allocatable :: cascade(:) ! Gas structuration cascade, set of scale
+        real(kind=8)             :: mass          ! Total mass of the structure
+        real(kind=8)             :: l             ! Current largest scale (at least one Cloud)
+        type(scale), allocatable :: cascade(:)    ! Gas structuration cascade, set of scale
     contains
-        procedure  :: create => gsh_create     ! Create the gas structuration (cascade)
-        procedure  :: delete => gsh_delete     ! Delete the gas structuration (cascade)
-        procedure  :: copy => gsh_copy         ! Copy a gsh object
-        procedure  :: evolve => gsh_evolve     ! Evolve the complete gsh struture by dt
-        procedure  :: status => gsh_status     ! Return the current status (outRate) of the gsh
-        procedure  :: solve => gsh_solve       ! Solve the input output system during dt
+        procedure  :: create => gsh_create        ! Create the gas structuration (cascade)
+        procedure  :: delete => gsh_delete        ! Delete the gas structuration (cascade)
+        procedure  :: copy => gsh_copy            ! Copy a gsh object
+        procedure  :: evolve => gsh_evolve        ! Evolve the complete gsh struture by dt
+        procedure  :: status => gsh_status        ! Return the current status (outRate) of the gsh
+        procedure  :: solve => gsh_solve          ! Solve the input output system during dt
+        procedure  :: Vesc => gsh_escape_velocity ! Return the escape velocity of the gs
     end type gsh
 
     ! INTERFACE OPERATOR DECLARATIONS
@@ -75,6 +77,11 @@ contains
             call this%cascade(i)%create(l)
         end do
 
+        ! Set the current largest scale
+        this%l = this%cascade(nScales)%l
+        i = gsh_l2i(this%l)
+
+        return
     end subroutine gsh_create
 
     ! **********************************
@@ -88,6 +95,7 @@ contains
         class(gsh)       :: this
 
         this%mass = 0.d0     ! Total mass of the structure
+        this%l    = 0.d0     ! Highest occupied scale
 
         ! Delete gas element in each cells
         do il = 1, nScales
@@ -111,8 +119,9 @@ contains
 
         class(gsh), intent(inout)        :: gs1
 
-        ! Copy mass
+        ! Copy
         gs1%mass = gs2%mass
+        gs1%l    = gs2%l
         ! 
         ! Allocate cascade
         if (.not. allocated(gs1%cascade)) then
@@ -247,9 +256,41 @@ contains
 
         real(kind=8)     :: l    ! The scale
 
-        i =  int(log(l/lStar)/log(stepFactor), kind=4) + 2
+        i =  int(log(l/lStar)/log(stepFactor), kind=4) + 1
+        i = min(i, nScales)
 
     end function gsh_l2i
+
+    ! **********************************
+    function gsh_escape_velocity(this) result(Vesc)
+
+        ! Return the escape velovity of the current gas structuration
+        ! The total mass (gsh%mass) of the gas is distributed into Nclouds formed
+        ! at the largest occupied scale (gsh%l)
+
+        implicit none
+
+        integer(kind=4)    :: il
+
+        real(kind=8)       :: Vesc
+        real(kind=8)       :: NClouds
+        real(kind=8)       :: mass
+
+        class(gsh)         :: this
+
+        il = gsh_l2i(this%l)  ! Get the index of the largest occupied scale
+        
+        ! The mass is distributed in the NClouds formed 
+        ! at the largest occupied scale
+        NClouds = this%cascade(il)%NClouds()
+        Vesc = 0.d0 ! Init
+        if (NClouds > 0.d0) then
+            mass = this%mass / NClouds
+            !
+            Vesc = sqrt(2.d0*GCst_CU*mass/this%l)  ! [CU]
+        end if
+
+    end function gsh_escape_velocity
 
     ! **********************************
     function gsh_status(this) result(rates)
@@ -284,11 +325,10 @@ contains
         integer(kind=4)                     :: s
         integer(kind=4)                     :: is
 
-        character(MAXPATHSIZE)              :: calledBy
-
         real(kind=8), intent(in)            :: l           ! The injection scale
         real(kind=8), intent(in)            :: dt          ! The time-step
         real(kind=8)                        :: mass        ! The updated total mass of the gsh
+        real(kind=8)                        :: ll          ! The largest occupied scale
 
         type(gas), intent(in)               :: inRate      ! The input rate
         type(gas), intent(in), allocatable  :: outRates(:) ! The set of output rates
@@ -296,8 +336,6 @@ contains
 
         class(gsh)                          :: this        ! The current gsh
         type(gsh)                           :: gs          ! The evolved gsh
-
-        write(calledBy, '(a)') 'gsh_evolve'
 
         ! Init gs structure from current
         gs = this
@@ -309,6 +347,7 @@ contains
         !
         ! Loop over scales from the largest to the lowest
         mass = 0. ! Init the total mass
+        ll   = this%cascade(1)%l ! Init the largest occupied scale
         do s = nScales, 1, -1
             !
             ! Largest scale case, no input from larger scale, only external input
@@ -326,10 +365,17 @@ contains
             !
             ! Update total mass
             mass = mass + gs%cascade(s)%gas%mass
+            !
+            ! Update the largest occupied scale
+            if ((mass > 0.) .and. (ll < gs%cascade(s)%l)) then
+                ll = gs%cascade(s)%l
+            end if
         end do
         !
         ! Set new total gas mass
         gs%mass = mass
+        ! Set new largest occupied scale
+        gs%l = ll
         !
         ! sInRate is delete
         call sInRate%delete()

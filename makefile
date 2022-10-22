@@ -8,6 +8,7 @@ MAINDIR  = ./src/main/
 TESTSDIR = ./src/tests/
 BINDIR   = ./bin/
 LOGDIR   = ./logs/
+VALIDDIR = ./validation/
 PARAMFILE_DIR = ./param_files/
 PARAMFILE = GAS_param.in
 
@@ -40,7 +41,8 @@ clean:
 	rm -f $(LIBDIR)*~
 	rm -f $(MAINDIR)*~
 	rm -f $(LOGDIR)*.log
-	rm -f $(LOGDIR)*.dat
+	rm -f $(VALIDDIR)*.log
+	rm -f $(VALIDDIR)*.dat
 
 utils:
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)parameters.f08
