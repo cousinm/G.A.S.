@@ -18,11 +18,11 @@ program GAS_tests
     ! Initialize modules
     call gsh_init()
     ! Run all "gas" object tests
-    !call gas_all_tests()
+    call gas_all_tests()
     ! Run all "scale" object tests
-    !call scale_all_tests()
+    call scale_all_tests()
     ! Run all "gsh" object tests
-    !call gsh_all_tests()
+    call gsh_all_tests()
     ! Run all "sp" object tests
     call sp_all_tests()
     

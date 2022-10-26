@@ -31,6 +31,8 @@ contains
 
         integer(kind=ikd), parameter :: u = 333       ! file unit
 
+        real(kind=rkd)             :: tstart, tend
+
         logical                    :: isValid
 
         character(MAXPATHSIZE)     :: filename
@@ -45,8 +47,10 @@ contains
         isValid = test_sp_new()
         write(u, '(a,l)') 'test_sp_new: ', isValid
 
+        call cpu_time(tstart)
         isValid = test_sp_constant_SFR()
-        write(u, '(a,l)') 'test_sp_constant_SFR: ', isValid
+        call cpu_time(tend)
+        write(u, '(a,f7.3,a,l)') 'test_sp_constant_SFR (', tend-tstart, ' sec): ', isValid
 
         ! Close log file
         close(u)

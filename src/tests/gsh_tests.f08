@@ -33,6 +33,8 @@ contains
 
         logical                    :: isValid
 
+        real(kind=rkd)             :: tstart, tend
+
         character(MAXPATHSIZE)     :: filename
 
         ! Open log file for these tests
@@ -45,11 +47,15 @@ contains
         isValid = test_gsh_delete()
         write(u, '(a,l)') 'test_gsh_delete: ', isValid
 
+        call cpu_time(tstart)
         isValid = test_gsh_constant_injection()
-        write(u, '(a,l)') 'test_gsh_constant_injection: ', isValid
+        call cpu_time(tend)
+        write(u, '(a,f7.3,a,l)') 'test_gsh_constant_injection (', tend-tstart, ' sec): ', isValid
 
+        call cpu_time(tstart)
         isValid = test_gsh_constant_and_stop_injection()
-        write(u, '(a,l)') 'test_gsh_constant_and_stop_injection: ', isValid
+        call cpu_time(tend)
+        write(u, '(a,f7.3,a,l)') 'test_gsh_constant_and_stop_injection (', tend-tstart, ' sec): ', isValid
 
         ! Close log file
         close(u)
