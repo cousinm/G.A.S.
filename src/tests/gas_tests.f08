@@ -29,7 +29,7 @@ contains
     
         implicit none
 
-        integer(kind=4), parameter :: u = 333       ! file unit
+        integer(kind=ikd), parameter :: u = 333       ! file unit
 
         logical                    :: isValid
 
@@ -77,7 +77,7 @@ contains
 
         implicit none
 
-        integer(kind=4)   :: e
+        integer(kind=ikd)   :: e
 
         logical           :: isValid
 
@@ -114,8 +114,8 @@ contains
 
         logical                 :: isValid
 
-        real(kind=8), parameter :: T_ref = 1.d5
-        real(kind=8)            :: T
+        real(kind=rkd), parameter :: T_ref = 1.d5
+        real(kind=rkd)            :: T
 
         type(gas)               :: g
 
@@ -146,11 +146,11 @@ contains
 
         implicit none
         
-        integer(kind=4)         :: e
+        integer(kind=ikd)         :: e
 
         logical                 :: isValid
 
-        real(kind=8), parameter :: T_ref = 1.d5  ! [K]
+        real(kind=rkd), parameter :: T_ref = 1.d5  ! [K]
 
         type(gas)               :: g1
         type(gas)               :: g2
@@ -192,7 +192,7 @@ contains
 
         implicit none
 
-        integer(kind=4)  :: e
+        integer(kind=ikd)  :: e
 
         logical          :: isValid
 
@@ -231,12 +231,12 @@ contains
 
         implicit none
 
-        integer(kind=4)         :: e
+        integer(kind=ikd)         :: e
 
         logical                 :: isValid
 
-        real(kind=8), parameter :: a = 3.
-        real(kind=8), parameter :: T_ref = 1.d5  ! [K]
+        real(kind=rkd), parameter :: a = 3.
+        real(kind=rkd), parameter :: T_ref = 1.d5  ! [K]
 
         type(gas)               :: g1
         type(gas)               :: g2
@@ -275,11 +275,11 @@ contains
 
         implicit none
 
-        integer(kind=4)         :: e
+        integer(kind=ikd)         :: e
 
         logical                 :: isValid
 
-        real(kind=8), parameter :: a = 3.
+        real(kind=rkd), parameter :: a = 3.
 
         type(gas)               :: g1
         type(gas)               :: g2
@@ -312,11 +312,11 @@ contains
 
         implicit none
 
-        integer(kind=4)         :: e
+        integer(kind=ikd)         :: e
 
         logical                 :: isValid
 
-        real(kind=8), parameter :: a = 2.
+        real(kind=rkd), parameter :: a = 2.
 
         type(gas)               :: g1
         type(gas)               :: g2

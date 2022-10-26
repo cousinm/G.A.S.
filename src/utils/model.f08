@@ -10,29 +10,30 @@ module model_mod
     !*****************************************************************************************************************
 
     use parameters  ! Acces to global defintions and properties
+    use config_mod  ! Acces to configurations parameters (path)
     use log_mod     ! Acces to logging procedures
 
     implicit none
 
     public
 
-    ! File units for input files
-    integer(kind=4), parameter   :: inputModelFileUnit = 119  ! Used to read input model parameter file
-
     ! Define integration scheme
     character(MAXPATHSIZE)   :: intScheme
     !
     ! Define scale specific parameters
-    real(kind=8)    :: lStar           ! Star formation scale (~ 0.1pc)
-    real(kind=8)    :: muStar          ! Specific gas surface density at the star forming scale [CU]
-    real(kind=8)    :: sigmaStar       ! Specific gas velocity dispersion at the star forming scale [CU]
-    real(kind=8)    :: mu_slope        ! Slope index for the gas surface density scalling relation
-    real(kind=8)    :: sigma_slope     ! Slope index for the velocity dispersion scalling relation
-    real(kind=8)    :: ETRV            ! Energy transfert rate per volume unit
+    real(kind=rkd)    :: lStar           ! Star formation scale (~ 0.1pc)
+    real(kind=rkd)    :: muStar          ! Specific gas surface density at the star forming scale [CU]
+    real(kind=rkd)    :: sigmaStar       ! Specific gas velocity dispersion at the star forming scale [CU]
+    real(kind=rkd)    :: mu_slope        ! Slope index for the gas surface density scalling relation
+    real(kind=rkd)    :: sigma_slope     ! Slope index for the velocity dispersion scalling relation
+    real(kind=rkd)    :: ETRV            ! Energy transfert rate per volume unit
     !
     ! Define gas structuration history parameters
-    integer(kind=4) :: nScales    ! Number of structuration scales
-    real(kind=8)    :: stepFactor ! Stepping factor of the gas structuration cascade
+    integer(kind=ikd) :: nScales    ! Number of structuration scales
+    real(kind=rkd)    :: stepFactor ! Stepping factor of the gas structuration cascade
+    !
+    ! Define stellar population parameters
+    character(MAXPATHSIZE)  :: IMF   ! Initial Mass Function Reference
 
 contains
 
@@ -60,7 +61,7 @@ contains
     
         implicit none
     
-        integer(kind=4)         :: loop
+        integer(kind=ikd)         :: loop
     
         character(MAXPATHSIZE)  :: filename
         character(MAXPATHSIZE)  :: message
@@ -88,8 +89,10 @@ contains
             ! and treat each one
             select case (trim(name))
                 !
+                ! Integration Scheme
                 case ('intScheme')
                     read(val, '(a)') intScheme
+                ! scale
                 case ('lStar')
                     read(val, *) lStar
                 case ('sigmaStar')
@@ -98,10 +101,14 @@ contains
                     read(val, *) muStar
                 case ('mu_slope')
                     read(val, *) mu_slope
+                ! gsh
                 case ('nScales')
                     read(val, *) nScales
                 case ('stepFactor')
                     read(val, *) stepFactor
+                ! stellar populations
+                case ('IMF')
+                    read(val, '(a)') IMF
                 case default
                     write(message, '(a,a,a)') 'Model parameter ', trim(name), ' is unknown'
                     call log_message(message, logLevel=LOG_ERROR)
@@ -119,7 +126,9 @@ contains
                         '|> mu_slope  : ', mu_slope, new_line('a')// &
                         '| GSH CONFIGURATION'//new_line('a')// &
                         '|> lStar           : ', nScales, new_line('a')// &
-                        '|> stepFactor      : ', stepFactor, new_line('a')
+                        '|> stepFactor      : ', stepFactor, new_line('a')// &
+                        '| STELLAR POPULATION'//new_line('a')// &
+                        '|> IMF             : ', trim(IMF), new_line('a')
         call log_message(message)
     end subroutine model_read_configuration_file
 

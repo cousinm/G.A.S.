@@ -5,6 +5,7 @@ program G_A_S
     use config_mod ! Acces to configurations parameters (path)
     use model_mod  ! Acces to model parameters and configurations
     use gsh_mod    ! Acces to gas structuration history module
+    use sp_mod     ! Acces to stellar population module
 
     implicit none 
 
@@ -14,5 +15,6 @@ program G_A_S
     call model_init()
     ! Initialize modules
     call gsh_init()
+    call sp_init()
 
 end program G_A_S

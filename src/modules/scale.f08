@@ -22,7 +22,7 @@ module scale_mod
     ! SCALE TYPE DEFINITION
 
     type scale
-        real(kind=8)  :: l        ! The current scale
+        real(kind=rkd)  :: l        ! The current scale
         type(gas)     :: gas      ! The gas stored at this scale > l-1 and < l
     contains
         procedure   :: create => scale_create               ! Create a scale object
@@ -87,7 +87,7 @@ contains
 
         implicit none
 
-        real(kind=8)  :: l
+        real(kind=rkd)  :: l
 
         class(scale)  :: this
 
@@ -208,7 +208,7 @@ contains
 
         implicit none
 
-        real(kind=8)          :: dt       ! The scale is evolve during dt
+        real(kind=rkd)        :: dt       ! The scale is evolve during dt
 
         type(gas), intent(in) :: inRate   ! The (dt-)constant input rate
         type(gas)             :: outRate  ! The corrected output rate
@@ -238,10 +238,9 @@ contains
                 scl_tmp = this%evolve(dt, inRate, outRate3)
                 outRate4 = scl_tmp%status()
                 ! Perform complete (corrected) evolution
-                outRate = 1.d0/6.d0*(outRate1 + &
-                                     2.d0*outRate2 + &
-                                     2.d0*outRate3 + &
-                                     outRate4)
+                outRate = real(1.d0/6.d0,kind=rkd)*(outRate1 + &
+                                     real(2.d0,kind=rkd)*outRate2 + &
+                                     real(2.d0,kind=rkd)*outRate3 + outRate4)
                 ! Final evolution with corrected output rate
                 this = this%evolve(dt, inRate, outRate)
             case default
@@ -274,7 +273,7 @@ contains
 
         implicit none
 
-        real(kind=8) :: N
+        real(kind=rkd) :: N
 
         class(scale) :: this
 
@@ -289,7 +288,7 @@ contains
 
         implicit none
 
-        real(kind=8)    :: M_BE
+        real(kind=rkd)    :: M_BE
 
         class(scale)    :: this
 
@@ -302,7 +301,7 @@ contains
 
         ! Return the volume of a sphere of scale l
 
-        real(kind=8)   :: V
+        real(kind=rkd)   :: V
 
         class(scale)   :: this
 
@@ -317,7 +316,7 @@ contains
 
         implicit none
 
-        real(kind=8)    :: sV
+        real(kind=rkd)    :: sV
 
         class(scale)    :: this
 
@@ -330,7 +329,7 @@ contains
 
         ! Return the mean mass surface density at this scale
 
-        real(kind=8)   :: mu
+        real(kind=rkd)   :: mu
 
         class(scale)   :: this
 
@@ -343,11 +342,11 @@ contains
 
         ! Return the current output rate of the scale
 
-        real(kind=8)   :: vRate
+        real(kind=rkd)   :: vRate
 
-        type(gas)      :: rate
+        type(gas)        :: rate
 
-        class(scale)   :: this
+        class(scale)     :: this
 
         ! Transfer mass to the lower scale is only possible
         ! if the current scale is unstable (this%nClouds() > 0)
@@ -369,7 +368,7 @@ contains
 
         character(MAXPATHSIZE) :: calledBy !
 
-        real(kind=8)           :: dt       ! The scale is evolve during dt
+        real(kind=rkd)           :: dt       ! The scale is evolve during dt
 
         type(gas), intent(in)  :: inRate   ! The input rate
         type(gas), intent(in)  :: outRate  ! The output rate
