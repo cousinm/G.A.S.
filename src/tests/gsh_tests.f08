@@ -29,7 +29,7 @@ contains
     
         implicit none
 
-        integer(kind=4), parameter :: u = 333       ! file unit
+        integer(kind=ikd), parameter :: u = 333       ! file unit
 
         logical                    :: isValid
 
@@ -108,18 +108,18 @@ contains
 
         implicit none
 
-        integer(kind=4)              :: is
-        integer(kind=4)              :: i
-        integer(kind=4), parameter   :: u = 10000        ! file unit
+        integer(kind=ikd)              :: is
+        integer(kind=ikd)              :: i
+        integer(kind=ikd), parameter   :: u = 10000        ! file unit
 
         logical                      :: isValid
 
         character(MAXPATHSIZE)       :: filename
 
-        real(kind=8), parameter      :: l = 1.d2*pc2kpc  ! [pc] Injection scale
-        real(kind=8), parameter      :: dt = 1.d-4       ! CU [Gyr]
-        real(kind=8), parameter      :: evolTime = 1.d0  ! CU [Gyr]
-        real(kind=8)                 :: t
+        real(kind=rkd), parameter      :: l = 1.d2*pc2kpc  ! [pc] Injection scale
+        real(kind=rkd), parameter      :: dt = 1.d-4       ! CU [Gyr]
+        real(kind=rkd), parameter      :: evolTime = 1.d0  ! CU [Gyr]
+        real(kind=rkd)                 :: t
 
         type(gas)                    :: inRate  ! The constant injection rate
         type(gsh)                    :: gs      ! gas structuration history
@@ -168,25 +168,25 @@ contains
 
         implicit none
 
-        integer(kind=4)              :: is
-        integer(kind=4)              :: i
-        integer(kind=4), parameter   :: u = 10000        ! file unit
+        integer(kind=ikd)              :: is
+        integer(kind=ikd)              :: i
+        integer(kind=ikd), parameter   :: u = 10000        ! file unit
 
         logical                      :: isValid
 
         character(MAXPATHSIZE)       :: filename
 
-        real(kind=8), parameter      :: l = 1.d2*pc2kpc  ! [pc] Injection scale
-        real(kind=8), parameter      :: dt = 1.d-4       ! CU [Gyr]
-        real(kind=8), parameter      :: evolTime = 2.d0  ! CU [Gyr]
-        real(kind=8)                 :: t
+        real(kind=rkd), parameter      :: l = 1.d2*pc2kpc  ! [pc] Injection scale
+        real(kind=rkd), parameter      :: dt = 1.d-4       ! CU [Gyr]
+        real(kind=rkd), parameter      :: evolTime = 2.d0  ! CU [Gyr]
+        real(kind=rkd)                 :: t
 
         type(gas)                    :: inRate  ! The constant injection rate
         type(gsh)                    :: gs      ! gas structuration history
 
         isValid = .FALSE.
 
-        inRate = 1.d0 * MassRate_CU * initAbund(nMetBins)  ! 1Msun/yr in CU
+        inRate = 1.d1 * MassRate_CU * initAbund(nMetBins)  ! 10 Msun/yr in CU
 
         ! Create a scale
         call gs%create()
@@ -208,7 +208,7 @@ contains
                 write(u+i, *) t, gs%mass, gs%l, gs%Vesc()*Velocity_km_s, gs%cascade(i)%nClouds(), gs%cascade(i)%gas%mass
             end do
             if (t > 1.0) then
-                inRate = 0.d0 * initAbund(nMetBins)
+                inRate = real(0.d0, kind=rkd) * initAbund(nMetBins)
             end if
             call gs%solve(dt, inRate, l)
             t = t + dt

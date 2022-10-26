@@ -2,7 +2,7 @@
 # COUSIN Morgane
 #
 # Integration scheme
-intScheme       = RK4       ! RK2 or RK4
+intScheme       = RK2       ! RK2 or RK4
 #
 # Scale parameters
 lStar           = 0.1       ! Specific star formation scale [pc]
@@ -13,4 +13,7 @@ mu_slope        = 0.2       ! slope index of the surface density scaling relatio
 # Gas structuration history
 nScales         = 18        ! Number of traking scales
 stepFactor      = 2.0       ! Stepping factor
+#
+# Stellar population
+IMF             = Chabrier+03  ! Initial Mass Function (Salpeter+55, Chabrier+03, Kroupa+93, Scalo+98)
 

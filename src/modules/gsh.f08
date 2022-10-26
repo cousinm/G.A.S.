@@ -20,8 +20,8 @@ module gsh_mod
     public
 
     type gsh
-        real(kind=8)             :: mass          ! Total mass of the structure
-        real(kind=8)             :: l             ! Current largest scale (at least one Cloud)
+        real(kind=rkd)             :: mass          ! Total mass of the structure
+        real(kind=rkd)             :: l             ! Current largest scale (at least one Cloud)
         type(scale), allocatable :: cascade(:)    ! Gas structuration cascade, set of scale
     contains
         procedure  :: create => gsh_create        ! Create the gas structuration (cascade)
@@ -63,9 +63,9 @@ contains
 
         implicit none
 
-        integer(kind=4)  :: i
+        integer(kind=ikd)  :: i
 
-        real(kind=8)     :: l
+        real(kind=rkd)     :: l
         class(gsh)       :: this
 
         this%mass = 0.d0                ! Total mass of the structure
@@ -91,7 +91,7 @@ contains
 
         implicit none
 
-        integer(kind=4)  :: il
+        integer(kind=ikd)  :: il
         class(gsh)       :: this
 
         this%mass = 0.d0     ! Total mass of the structure
@@ -113,7 +113,7 @@ contains
 
         implicit none
 
-        integer(kind=4)                  :: s
+        integer(kind=ikd)                  :: s
 
         type(gsh), intent(in)            :: gs2
 
@@ -157,12 +157,14 @@ contains
 
         implicit none
 
-        integer(kind=4)          :: s
+        integer(kind=ikd)          :: s
+        integer(kind=ikd)          :: il
 
-        real(kind=8), intent(in) :: dt           ! The gsh is evolved during dt
-        real(kind=8), intent(in) :: l            ! Scale injection
+        real(kind=rkd), intent(in) :: dt         ! The gsh is evolved during dt
+        real(kind=rkd), intent(in) :: l          ! Scale injection
 
         type(gas), intent(in)    :: inRate       ! The (dt-)constant input rate
+        type(gas), allocatable   :: inRates(:)   ! The set of input rates
         type(gas), allocatable   :: outRates(:)  ! The corrected set of output rates
         type(gas), allocatable   :: outRates1(:) ! Intermediates set of output rates
         type(gas), allocatable   :: outRates2(:)
@@ -173,13 +175,21 @@ contains
 
         class(gsh)               :: this     ! The current scale
 
-        ! Init OutRates
+        ! Init outRates
         allocate(outRates(nScales))
+        allocate(inRates(nScales))
+        !
+        ! Init inRates and add external input rates
+        il = gsh_l2i(l)
+        do s = 1, nScales
+            call inRates(s)%create()
+            if (s == il) inRates(s) = inRate
+        end do
         !
         ! Get curent status
         outRates1 = this%status()
         ! Performed evolution for dt/2
-        gsh_tmp = this%evolve(dt/2.d0, l, inRate, outRates1)
+        gsh_tmp = this%evolve(dt/2.d0, inRates, outRates1)
         !
         select case (trim(intScheme))
             !
@@ -188,30 +198,31 @@ contains
                 ! Get curent status
                 outRates2 = gsh_tmp%status()
                 ! Get second intermediate state
-                gsh_tmp = this%evolve(dt/2.d0, l, inRate, outRates2)
+                gsh_tmp = this%evolve(dt/2.d0, inRates, outRates2)
                 outRates3 = gsh_tmp%status()
                 ! Get last intermediate state
-                gsh_tmp = this%evolve(dt, l, inRate, outRates3)
+                gsh_tmp = this%evolve(dt, inRates, outRates3)
                 outRates4 = gsh_tmp%status()
                 ! Perform complete (corrected) evolution
                 do s = 1, nScales
-                    outRates(s) = 1.d0/6.d0*(outRates1(s) + &
-                                            2.d0*outRates2(s) + &
-                                            2.d0*outRates3(s) + &
-                                            outRates4(s))
+                    outRates(s) = real(1.d0/6.d0,kind=rkd)*(outRates1(s) + &
+                                                            real(2.d0, kind=rkd)*outRates2(s) + &
+                                                            real(2.d0, kind=rkd)*outRates3(s) + &
+                                                            outRates4(s))
                 end do
                 ! Final evolution with corrected output rates
-                this = this%evolve(dt, l, inRate, outRates)
+                this = this%evolve(dt, inRates, outRates)
             case default
                 ! Range-Kutta 2d order
                 ! Get intermedite status
                 outRates = gsh_tmp%status()
                 ! Perform complete evolution
-                this = this%evolve(dt, l, inRate, outRates)
+                this = this%evolve(dt, inRates, outRates)
         end select
         !
         ! Delete temporary gas object
         do s = 1, nScales
+            call inRates(s)%delete()
             call outRates(s)%delete()
             call outRates1(s)%delete()
             if (allocated(outRates2)) call outRates2(s)%delete()
@@ -219,7 +230,7 @@ contains
             if (allocated(outRates4)) call outRates4(s)%delete()
         end do
         ! Deallocate arrays
-        deallocate(outRates, outRates1)
+        deallocate(inRates, outRates, outRates1)
         if (allocated(outRates2)) deallocate(outRates2)
         if (allocated(outRates3)) deallocate(outRates3)
         if (allocated(outRates4)) deallocate(outRates4)
@@ -237,9 +248,9 @@ contains
 
         implicit none
 
-        integer(kind=4), intent(in)  :: i
+        integer(kind=ikd), intent(in)  :: i
 
-        real(kind=8)                 :: l
+        real(kind=rkd)                 :: l
 
         l = stepFactor**(i-1)*lStar
 
@@ -252,11 +263,11 @@ contains
 
         implicit none
 
-        integer(kind=4)  :: i
+        integer(kind=ikd)  :: i
 
-        real(kind=8)     :: l    ! The scale
+        real(kind=rkd)     :: l    ! The scale
 
-        i =  int(log(l/lStar)/log(stepFactor), kind=4) + 1
+        i =  int(log(l/lStar)/log(stepFactor), kind=ikd) + int(1, kind=ikd)
         i = min(i, nScales)
 
     end function gsh_l2i
@@ -270,11 +281,11 @@ contains
 
         implicit none
 
-        integer(kind=4)    :: il
+        integer(kind=ikd)    :: il
 
-        real(kind=8)       :: Vesc
-        real(kind=8)       :: NClouds
-        real(kind=8)       :: mass
+        real(kind=rkd)       :: Vesc
+        real(kind=rkd)       :: NClouds
+        real(kind=rkd)       :: mass
 
         class(gsh)         :: this
 
@@ -297,7 +308,7 @@ contains
 
         implicit none
 
-        integer(kind=4)        :: s
+        integer(kind=ikd)        :: s
 
         type(gas), allocatable :: rates(:)  ! The set of output rates (all scales)
         
@@ -313,53 +324,44 @@ contains
     end function gsh_status
 
     ! **********************************
-    function gsh_evolve(this, dt, l, inRate, outRates) result(gs)
+    function gsh_evolve(this, dt, inRates, outRates) result(gs)
 
         ! Evolve a gas structuration history by dt
-        ! The gas structuration cascade is fed
-        ! at the scale "l" by an input rate "inRate"
-        ! and evolve trought a set of output rates "outRates"
+        ! The gas structuration cascade evolves with:
+        !  - A set of input rates "inRates", 
+        !    (external input at the scale "l" is already included)
+        ! - A set of output rates "outRates"
 
         implicit none
     
-        integer(kind=4)                     :: s
-        integer(kind=4)                     :: is
+        integer(kind=ikd)                      :: s
 
-        real(kind=8), intent(in)            :: l           ! The injection scale
-        real(kind=8), intent(in)            :: dt          ! The time-step
-        real(kind=8)                        :: mass        ! The updated total mass of the gsh
-        real(kind=8)                        :: ll          ! The largest occupied scale
+        real(kind=rkd), intent(in)          :: dt          ! The time-step
+        real(kind=rkd)                      :: mass        ! The updated total mass of the gsh
+        real(kind=rkd)                      :: ll          ! The largest occupied scale
 
-        type(gas), intent(in)               :: inRate      ! The input rate
+        type(gas), intent(in), allocatable  :: inRates(:)  ! The input rate
         type(gas), intent(in), allocatable  :: outRates(:) ! The set of output rates
-        type(gas)                           :: sInRate     ! Total input rate at scale s
+        type(gas)                           :: sInRate     ! local input rate
+
+        type(gsh)                           :: gs          ! The evolved gsh
 
         class(gsh)                          :: this        ! The current gsh
-        type(gsh)                           :: gs          ! The evolved gsh
 
         ! Init gs structure from current
         gs = this
         ! Init sInRate
         call sInRate%create()
-        ! 
-        ! Gas injection will be performed at scale indexed is
-        is = gsh_l2i(l)
         !
         ! Loop over scales from the largest to the lowest
         mass = 0. ! Init the total mass
-        ll   = this%cascade(1)%l ! Init the largest occupied scale
         do s = nScales, 1, -1
             !
-            ! Largest scale case, no input from larger scale, only external input
+            ! Take into account internal transfer rates
+            ! The largest scale if only fed by external input
             if (s < nScales) then
-                call sInRate%copy(outRates(s+1))  ! Input from larger scale
+                sInRate = InRates(s) + outRates(s+1)
             end if
-            !
-            ! External injection at specific scale
-            if (s == is) then
-                sInRate = sInRate + inRate
-            end if
-            !
             ! Apply evolution at scale s
             gs%cascade(s) = this%cascade(s)%evolve(dt, sInRate, outRates(s))
             !
@@ -376,9 +378,6 @@ contains
         gs%mass = mass
         ! Set new largest occupied scale
         gs%l = ll
-        !
-        ! sInRate is delete
-        call sInRate%delete()
 
     end function gsh_evolve
 

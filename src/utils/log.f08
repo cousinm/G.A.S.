@@ -20,14 +20,14 @@ module log_mod
     character(MAXPATHSIZE)     :: logPath
     !
     ! Log level
-    integer(kind=4), parameter :: LOG_INFO = 1
-    integer(kind=4), parameter :: LOG_WARNING = 2
-    integer(kind=4), parameter :: LOG_ERROR = 3
+    integer(kind=ikd), parameter :: LOG_INFO = 1
+    integer(kind=ikd), parameter :: LOG_WARNING = 2
+    integer(kind=ikd), parameter :: LOG_ERROR = 3
     !
     ! Common file unit for log
     !   the rank of the current process is added to return
     !   the specific file unit of the current process
-    integer(kind=4), parameter :: logProcessUnit = 2000
+    integer(kind=ikd), parameter :: logProcessUnit = 2000
 
 contains
 
@@ -42,7 +42,7 @@ contains
 
         implicit none
 
-        integer(kind=4)                     :: u        ! log file unit
+        integer(kind=ikd)                     :: u        ! log file unit
 
         character(MAXPATHSIZE), intent(in)  :: lPath    ! log directory
         character(MAXPATHSIZE)              :: filename ! log filename
@@ -66,7 +66,7 @@ contains
 
         implicit none
 
-        integer(kind=4) :: u  ! log file unit
+        integer(kind=ikd) :: u  ! log file unit
 
         ! Get file unit associated to the current process myRank
         u = log_get_process_file_unit()
@@ -83,12 +83,12 @@ contains
 
         implicit none
 
-        integer(kind=4)                          :: i                ! loop over physical parameters that should be printed
-        integer(kind=4)                          :: u                ! file unit
-        integer(kind=4), intent(inout), optional :: componentRank    ! component indentation for log printing
-        integer(kind=4)                          :: compRank
-        integer(kind=4), intent(in), optional    :: logLevel         ! log Level (info, warning, error)
-        integer(kind=4), intent(in), optional    :: intParams(:)     ! values of physical parameters (integer format)
+        integer(kind=ikd)                          :: i                ! loop over physical parameters that should be printed
+        integer(kind=ikd)                          :: u                ! file unit
+        integer(kind=ikd), intent(inout), optional :: componentRank    ! component indentation for log printing
+        integer(kind=ikd)                          :: compRank
+        integer(kind=ikd), intent(in), optional    :: logLevel         ! log Level (info, warning, error)
+        integer(kind=ikd), intent(in), optional    :: intParams(:)     ! values of physical parameters (integer format)
 
         character(*), intent(in)                 :: message          ! the message
         character(*), intent(in), optional       :: calledBy         ! trace back of the error message
@@ -97,9 +97,9 @@ contains
         character(12)                            :: lLevel           ! log level
         character(25), intent(in), optional      :: paramNames(:)    ! name of physical parameters
 
-        real(kind=8), intent(in), optional       :: realParams(:)    ! values of physical parameters (real format)
-        real(kind=8)                             :: time             ! current time
-        real(kind=8)                             :: hour, min, sec   !
+        real(kind=rkd), intent(in), optional       :: realParams(:)    ! values of physical parameters (real format)
+        real(kind=rkd)                             :: time             ! current time
+        real(kind=rkd)                             :: hour, min, sec   !
 
         call cpu_time(time)                   ! current time
         hour = floor(time/60./60.)            ! number of hours
@@ -162,7 +162,7 @@ contains
 
         implicit none 
         
-        integer(kind=4)  :: log_get_process_file_unit
+        integer(kind=ikd)  :: log_get_process_file_unit
         
         log_get_process_file_unit = logProcessUnit + myRank
         

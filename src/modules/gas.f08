@@ -22,15 +22,15 @@ module gas_mod
     ! GAS TYPE DEFINITION
 
     type gas
-        real(kind=8)              :: mass       ! total mass  (in code unit)
-        real(kind=8)              :: mZ         ! mass of metals (in code unit)
-        real(kind=8)              :: Eint       ! Internal energy of the gas (in code unit)
-        real(kind=8), allocatable :: elts(:)    ! mass of main ISM elements (e.g H1, He, C12, N14, O16, Fe56)
+        real(kind=rkd)              :: mass       ! total mass  (in code unit)
+        real(kind=rkd)              :: mZ         ! mass of metals (in code unit)
+        real(kind=rkd)              :: Eint       ! Internal energy of the gas (in code unit)
+        real(kind=rkd), allocatable :: elts(:)    ! mass of main ISM elements (e.g H1, He, C12, N14, O16, Fe56)
     contains
         procedure :: create => gas_create       ! Create and initialize a gas object
         procedure :: delete => gas_delete       ! Delete a gas object
-        procedure :: isCreated => gas_isCreated ! Test is gas object is already created
-        procedure :: isValid => gas_isValid           ! Test concistency of the gas object
+        procedure :: isCreated => gas_isCreated ! Test if gas object is already created
+        procedure :: isValid => gas_isValid     ! Test concistency of the gas object
         procedure :: copy => gas_copy           ! Copy a gas object from an other
         procedure :: add => gas_add             ! Add a gas object
         procedure :: sub => gas_sub             ! Substract a gas object
@@ -43,23 +43,20 @@ module gas_mod
     end type gas
 
     ! Define gas specific parameters
-    integer(kind=4)                 :: nElts         ! Number of Main ISM elements followed
-    integer(kind=4)                 :: nMetBins      ! Number of metallicity bins used
+    integer(kind=ikd)                 :: nElts         ! Number of Main ISM elements followed
+    integer(kind=ikd)                 :: nMetBins      ! Number of metallicity bins used
     !
     character(len=4), allocatable   :: eltNames(:)   ! List of main ISM elements followed (e.g H1, He, C12, N14, O16, Fe56)
     !
-    real(kind=8), allocatable       :: metBins(:)    ! Mass fraction corresponding to metallicity bins
+    real(kind=rkd), allocatable     :: metBins(:)    ! Mass fraction corresponding to metallicity bins
     type(gas), allocatable          :: initAbund(:)  ! Initial abundances (in mass fraction) associated to each metallicity bin
                                                      ! InitAbund is defined as a gas object, e.i InitAbund[Z]%mass = 1., InitAbund[Z]%mZ = metBins(Z)
                                                      ! and for each main ISM elements InitAbund[Z]%elts(e) = X0_elt
-    !
-    ! File unit for input parameter file "gas_properties.in"
-    integer(kind=4), parameter     :: gasPropertiesUnit = 117
 
     ! INTERFACE OPERATOR DECLARATIONS
 
     interface assignment (=)  ! allows to copy a gas component by using the symbol '='
-        module procedure copy
+        module procedure gas_copy
     end interface assignment (=)
 
     interface operator (+)  ! allows to add two gas components by using the symbol '+'
@@ -99,7 +96,7 @@ contains
 
         implicit none
     
-        integer(kind=4)          :: j,e ! loop indexes (metallicity and elements)
+        integer(kind=ikd)          :: j,e ! loop indexes (metallicity and elements)
     
         character(MAXPATHSIZE)   :: filename
         character(MAXPATHSIZE)   :: line
@@ -151,11 +148,10 @@ contains
             if (line(1:1) .eq. '#') then
                 cycle ! header or something like this (skip)
             else
-                write(message, '(a)') 'Impossible to read a line in the gas_properties.in file'
+                write(message, '(a, a)') 'Impossible to read a line in ', trim(filename)
                 call log_message(message, &
                                  logLevel=LOG_ERROR, &
                                  calledBy='gas_read_properties')
-                stop ! stop the program
             end if
         end do
 2       close(gasPropertiesUnit)
@@ -204,7 +200,7 @@ contains
         !    Mass should be > 0. for all components
         !    Total internal energy should be > 0. too
 
-        integer(kind=4)                     :: e
+        integer(kind=ikd)                     :: e
 
         character(MAXPATHSIZE)              :: message
         character(MAXPATHSIZE), intent(in)  :: calledBy
@@ -303,20 +299,6 @@ contains
     end subroutine gas_copy
 
     ! **********************************
-    subroutine copy(g1, g2)
-
-        ! Interface procedure to copy
-
-        implicit none
-
-        type(gas), intent(in)      :: g2
-        class(gas), intent(inout)  :: g1
-
-        call gas_copy(g1, g2)
-
-    end subroutine copy
-
-    ! **********************************
     subroutine gas_add(this, g)
 
         ! Add the gas object g to the current gas object (this = this - g)
@@ -368,9 +350,9 @@ contains
 
         character(MAXPATHSIZE)           :: calledBy
 
-        real(kind=8), intent(in)         :: T      ! The temperature [K]
-        real(kind=8)                     :: eint   ! Internal energy per particle
-        real(kind=8)                     :: mu     ! mean molecular mass
+        real(kind=rkd), intent(in)         :: T      ! The temperature [K]
+        real(kind=rkd)                     :: eint   ! Internal energy per particle
+        real(kind=rkd)                     :: mu     ! mean molecular mass
 
         class(gas)                       :: this
 
@@ -444,7 +426,7 @@ contains
 
         class(gas), intent(in)   :: this
 
-        real(kind=8)             :: mZ
+        real(kind=rkd)             :: mZ
 
         mZ = this%mZ / this%mass
 
@@ -479,11 +461,11 @@ contains
 
         implicit none
 
-        integer(kind=4)          :: e
+        integer(kind=ikd)          :: e
 
         character(len=*)         :: component
 
-        real(kind=8)             :: X
+        real(kind=rkd)             :: X
 
         class(gas), intent(in)   :: this
 
@@ -520,8 +502,8 @@ contains
 
         class(gas), intent(in)   :: this
 
-        real(kind=8)             :: X, Y
-        real(kind=8)             :: mu
+        real(kind=rkd)             :: X, Y
+        real(kind=rkd)             :: mu
 
         X = this%abundance('H1')
         Y = this%abundance('He4')
@@ -547,7 +529,7 @@ contains
 
         implicit none
 
-        real(kind=8)             :: T, N, mu
+        real(kind=rkd)             :: T, N, mu
 
         class(gas), intent(in)   :: this
 
@@ -577,10 +559,10 @@ contains
     
         implicit none
 
-        real(kind=8), intent(in)  :: a
+        real(kind=rkd), intent(in)  :: a
     
-        type(gas), intent(in)     :: g
-        type(gas)                 :: ga
+        type(gas), intent(in)       :: g
+        type(gas)                   :: ga
 
         ! Create the return gas object
         call ga%create()
@@ -599,10 +581,10 @@ contains
     
         implicit none
     
-        real(kind=8), intent(in)  :: a
+        real(kind=rkd), intent(in)  :: a
     
-        type(gas), intent(in)     :: g
-        type(gas)                 :: ag
+        type(gas), intent(in)       :: g
+        type(gas)                   :: ag
 
         ! Use comutativity property
         ag = gas_scalar_multiply_left(g, a)

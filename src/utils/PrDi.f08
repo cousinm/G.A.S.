@@ -1,5 +1,7 @@
 module PrDi_mod
 
+    use parameters
+
     implicit none
 
     public
@@ -18,9 +20,9 @@ module PrDi_mod
     ! DEFINITION OF GLOBAL VARIABLE LINKED TO PROCESS DISTRIBUTION
     !
     ! MPI process variable, rank, number of processes
-    integer(kind=4)                      :: myRank             ! Rank of the process
-    integer(kind=4)                      :: mainProcessRank    ! rank of the main process
-    integer(kind=4)                      :: nbProc             ! Number of processus available for the computation
+    integer(kind=ikd)    :: myRank             ! Rank of the process
+    integer(kind=ikd)    :: mainProcessRank    ! rank of the main process
+    integer(kind=ikd)    :: nbProc             ! Number of processus available for the computation
 
 contains
 

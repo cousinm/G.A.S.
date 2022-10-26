@@ -16,13 +16,21 @@ module config_mod
 
     public
 
-    ! File units for input files
-    integer(kind=4), parameter   :: inputParameterFileUnit = 110  ! Used to read input parameter file
+    ! File units for main parameters input files
+    integer(kind=ikd), parameter   :: inputParameterFileUnit = 110
+    ! File units for model parameters input files
+    integer(kind=ikd), parameter   :: inputModelFileUnit = 111
+    ! File unit for input parameter file "gas_properties.in"
+    integer(kind=ikd), parameter   :: gasPropertiesUnit = 112
+    ! File unit for mass loss rates input data file
+    integer(kind=ikd), parameter   :: massLoss_unit = 113
+    ! File unit for SN rates input data file
+    integer(kind=ikd), parameter   :: snRate_unit = 114
 
     ! Main directories path
     character(MAXPATHSIZE)       :: validPath
     character(MAXPATHSIZE)       :: librariesPath
-    character(MAXPATHSIZE)       :: stellarPopulationPath
+    character(MAXPATHSIZE)       :: stellarPopPath
     character(MAXPATHSIZE)       :: treesPath
     character(MAXPATHSIZE)       :: outputPath
 
@@ -52,7 +60,7 @@ contains
     
         implicit none
     
-        integer(kind=4)         :: loop
+        integer(kind=ikd)         :: loop
     
         character(MAXPATHSIZE)  :: filename
         character(MAXPATHSIZE)  :: message
@@ -90,6 +98,8 @@ contains
                 !
                 case ('librariesPath')
                     read(val, '(a)') librariesPath  ! libraries input path
+                    ! Deduced the stellar population path
+                    write(stellarPopPath, '(a,a)') trim(librariesPath), '/sp'
                 !
                 case ('treesPath')
                     read(val, '(a)') treesPath      ! tree files path

@@ -30,7 +30,7 @@ contains
     
         implicit none
 
-        integer(kind=4), parameter :: u = 333       ! file unit
+        integer(kind=ikd), parameter :: u = 333       ! file unit
 
         logical                    :: isValid
 
@@ -58,16 +58,16 @@ contains
 
         implicit none
 
-        integer(kind=4), parameter   :: u = 334          ! file unit
+        integer(kind=ikd), parameter   :: u = 334          ! file unit
 
         logical                      :: isValid
 
         character(MAXPATHSIZE)       :: filename
 
-        real(kind=8), parameter      :: l = 1.d2*pc2kpc  ! [pc] Injection scale
-        real(kind=8), parameter      :: dt = 1.d-4       ! CU [Gyr]
-        real(kind=8), parameter      :: evolTime = 1.d0  ! CU [Gyr]
-        real(kind=8)                 :: t
+        real(kind=rkd), parameter      :: l = 1.d2*pc2kpc  ! [pc] Injection scale
+        real(kind=rkd), parameter      :: dt = 1.d-4       ! CU [Gyr]
+        real(kind=rkd), parameter      :: evolTime = 1.d0  ! CU [Gyr]
+        real(kind=rkd)                 :: t
 
         type(gas)                    :: inRate  ! The constant injection rate
         type(scale)                  :: scl     ! A gas scale
