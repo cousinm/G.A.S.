@@ -18,7 +18,8 @@ module model_mod
     public
 
     ! Define integration scheme
-    character(MAXPATHSIZE)   :: intScheme
+    character(MAXPATHSIZE)   :: solver
+    integer(kind=ikd)        :: nSolverStep
     !
     ! Define scale specific parameters
     real(kind=rkd)    :: lStar           ! Star formation scale (~ 0.1pc)
@@ -90,8 +91,16 @@ contains
             select case (trim(name))
                 !
                 ! Integration Scheme
-                case ('intScheme')
-                    read(val, '(a)') intScheme
+                case ('solver')
+                    read(val, '(a)') solver
+                    select case (trim(solver))
+                    case ('RK4')
+                        ! Range-Kutta 4th order
+                        nSolverStep = 4
+                    case default
+                        ! Range Kutte 2d order
+                        nSolverStep = 2
+                    end select
                 ! scale
                 case ('lStar')
                     read(val, *) lStar
@@ -118,7 +127,7 @@ contains
         !
         write(message, *) 'Read model configuration file : ',trim(filename)//new_line('a')// &
                         '| INTEGRATOR'//new_line('a')// &
-                        '|> intScheme : '//trim(intScheme)//new_line('a')// &
+                        '|> intScheme : '//trim(solver)//new_line('a')// &
                         '| SCALE CONFIGURATION'//new_line('a')// &
                         '|> lStar     : ', lStar, new_line('a')// &
                         '|> sigmaStar : ', sigmaStar, new_line('a')// &

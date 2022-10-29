@@ -27,11 +27,15 @@ module gsh_mod
         procedure  :: create => gsh_create        ! Create the gas structuration (cascade)
         procedure  :: delete => gsh_delete        ! Delete the gas structuration (cascade)
         procedure  :: copy => gsh_copy            ! Copy a gsh object
-        procedure  :: evolve => gsh_evolve        ! Evolve the complete gsh struture by dt
-        procedure  :: status => gsh_status        ! Return the current status (outRate) of the gsh
-        procedure  :: solve => gsh_solve          ! Solve the input output system during dt
+        procedure  :: solve => gsh_solve          ! Solve, for dt, the next step of the integration scheme
+        procedure  :: stevolve => gsh_stevolve    ! Evolve, for dt, the next step of the integration scheme
+        procedure  :: evolve => gsh_evolve        !         according to internal/external input/output
         procedure  :: Vesc => gsh_escape_velocity ! Return the escape velocity of the gs
     end type gsh
+
+    ! TEMPORARY INTERMEDIATE STATUS
+    ! Targets
+    type(gas), allocatable, target     :: gshStatus(:)
 
     ! INTERFACE OPERATOR DECLARATIONS
 
@@ -52,7 +56,15 @@ contains
 
         implicit none
 
+        integer(kind=ikd)    :: s
+
         call scale_init()
+
+        ! Init intermediate status
+        allocate(gshStatus(nScales))
+        do s = 1, nScales
+            call gshStatus(s)%create()
+        end do
 
     end subroutine gsh_init
 
@@ -150,92 +162,105 @@ contains
     end subroutine gsh_copy_
 
     ! **********************************
-    subroutine gsh_solve(this, dt, inRate, l)
+    subroutine gsh_stevolve(this, dt, st, l, inRate, outRates, pStatus, pGs)
 
-        ! Solve the evolution of the current gas structuration
-        !  according to a constant external input rate "inRate"
+        ! Compute current status of the gas structuration
+        ! according to :
+        ! - Internal evolution processes
+        ! - A constant input rate (due to external process) "inRate" and
+        ! - A set of constant output rates (due to external process) "outRates"
+        ! Then
+        ! Apply the next step "st" of the complete integration scheme
+
+        implicit none
+    
+        integer(kind=ikd), intent(in)       :: st
+        integer(kind=ikd)                   :: il
+        integer(kind=ikd)                   :: s
+
+        real(kind=rkd), intent(in)          :: dt          ! The time-step
+        real(kind=rkd), intent(in)          :: l           ! The injection scale
+        real(kind=rkd)                      :: mass        ! mass contains in the complete cascade
+
+        type(gas), intent(in)               :: inRate      ! The external input rate
+        type(gas), intent(in), allocatable  :: outRates(:) ! The set of output rates
+        type(gas), pointer                  :: pStatus(:)  ! Pointer to the complete corrected status
+        type(gas), pointer                  :: pSclStatus
+        type(gas)                           :: sInRate
+
+        type(scale), pointer                :: pScl        ! Pointer to the current scale
+        type(gsh), pointer                  :: pGs         ! pointer to the current evolved state
+
+        class(gsh)                          :: this        ! The current gsh
+
+        ! Get the injection scale bin index
+        il = gsh_l2i(l)
+
+        ! Init sInRate
+        call sInRate%create()
+
+        ! Init total mass
+        mass = real(0.d0, kind=rkd)
+        do s = nScales, 1, -1
+            ! Compute current global status due to
+            ! Internal process + external input/output
+            ! The largest scale can only be fed by external input
+            ! Here sInRate is null for s = nScale
+            if (s == il) sInRate = sInRate + inRate
+            !
+            ! Apply the new solver step
+            pSclStatus => pStatus(s)
+            pScl => pGs%cascade(s)
+            call this%cascade(s)%stevolve(dt, st, sInRate, outRates(s), pSclStatus, pScl)
+            !
+            ! Save the inRate of the next lower scale
+            sInRate = this%cascade(s)%status()
+            !
+            ! Update total cascade mass
+            mass = mass + pGs%cascade(s)%gas%mass
+        end do
+        ! Set total mass
+        pGs%mass = mass
+
+    end subroutine gsh_stevolve
+
+    ! **********************************
+    subroutine gsh_evolve(this, dt, l, inRate, outRates)
+
+        ! Evolve, during dt, the current gas structuration
+        ! according to :
+        ! - Internal evolution processes
+        ! - A constant input rate (due to external process) "inRate" and
+        ! - A set of constant output rates (due to external process) "outRates"
 
         implicit none
 
-        integer(kind=ikd)          :: s
-        integer(kind=ikd)          :: il
+        integer(kind=ikd)                   :: st          ! Step index of evolution scheme
 
-        real(kind=rkd), intent(in) :: dt         ! The gsh is evolved during dt
-        real(kind=rkd), intent(in) :: l          ! Scale injection
+        real(kind=rkd), intent(in)          :: dt          ! The scale is evolve during dt
+        real(kind=rkd), intent(in)          :: l           ! The injection scale
 
-        type(gas), intent(in)    :: inRate       ! The (dt-)constant input rate
-        type(gas), allocatable   :: inRates(:)   ! The set of input rates
-        type(gas), allocatable   :: outRates(:)  ! The corrected set of output rates
-        type(gas), allocatable   :: outRates1(:) ! Intermediates set of output rates
-        type(gas), allocatable   :: outRates2(:)
-        type(gas), allocatable   :: outRates3(:)
-        type(gas), allocatable   :: outRates4(:)
+        type(gas), intent(in)               :: inRate      ! The (dt-)constant input rate
+        type(gas), intent(in), allocatable  :: outRates(:) ! The set of output rates
+        type(gas), pointer                  :: pStatus(:)  ! Pointer to the corrected status
 
-        type(gsh)                :: gsh_tmp  ! Intermediate states of the scale
+        type(gsh), target                   :: gs          ! The current intermediate evolved scale
+        type(gsh), pointer                  :: pGsh        ! Pointer to the curretn evolved scale
 
-        class(gsh)               :: this     ! The current scale
+        class(gsh)                          :: this        ! The current scale
 
-        ! Init outRates
-        allocate(outRates(nScales))
-        allocate(inRates(nScales))
-        !
-        ! Init inRates and add external input rates
-        il = gsh_l2i(l)
-        do s = 1, nScales
-            call inRates(s)%create()
-            if (s == il) inRates(s) = inRate
+        ! Init intermediate status with the current status
+        gs = this
+        pGsh => gs
+        ! Define complete corrected status
+        pStatus => gshStatus
+        do st = 1, nSolverStep
+            call this%stevolve(dt, st, l, inRate, outRates, pStatus, pGsh)
         end do
-        !
-        ! Get curent status
-        outRates1 = this%status()
-        ! Performed evolution for dt/2
-        gsh_tmp = this%evolve(dt/2.d0, inRates, outRates1)
-        !
-        select case (trim(intScheme))
-            !
-            case ('RK4')
-                ! Range-Kutta 4th order
-                ! Get curent status
-                outRates2 = gsh_tmp%status()
-                ! Get second intermediate state
-                gsh_tmp = this%evolve(dt/2.d0, inRates, outRates2)
-                outRates3 = gsh_tmp%status()
-                ! Get last intermediate state
-                gsh_tmp = this%evolve(dt, inRates, outRates3)
-                outRates4 = gsh_tmp%status()
-                ! Perform complete (corrected) evolution
-                do s = 1, nScales
-                    outRates(s) = real(1.d0/6.d0,kind=rkd)*(outRates1(s) + &
-                                                            real(2.d0, kind=rkd)*outRates2(s) + &
-                                                            real(2.d0, kind=rkd)*outRates3(s) + &
-                                                            outRates4(s))
-                end do
-                ! Final evolution with corrected output rates
-                this = this%evolve(dt, inRates, outRates)
-            case default
-                ! Range-Kutta 2d order
-                ! Get intermedite status
-                outRates = gsh_tmp%status()
-                ! Perform complete evolution
-                this = this%evolve(dt, inRates, outRates)
-        end select
-        !
-        ! Delete temporary gas object
-        do s = 1, nScales
-            call inRates(s)%delete()
-            call outRates(s)%delete()
-            call outRates1(s)%delete()
-            if (allocated(outRates2)) call outRates2(s)%delete()
-            if (allocated(outRates3)) call outRates3(s)%delete()
-            if (allocated(outRates4)) call outRates4(s)%delete()
-        end do
-        ! Deallocate arrays
-        deallocate(inRates, outRates, outRates1)
-        if (allocated(outRates2)) deallocate(outRates2)
-        if (allocated(outRates3)) deallocate(outRates3)
-        if (allocated(outRates4)) deallocate(outRates4)
+        ! Save complete evolved state
+        this = gs
 
-    end subroutine gsh_solve
+    end subroutine gsh_evolve
 
     !
     ! FUNCTIONS
@@ -306,79 +331,57 @@ contains
     ! **********************************
     function gsh_status(this) result(rates)
 
+        ! Return the current status of the gas structuration
+        ! according to its internal evolution only
+
         implicit none
+  
+        integer(kind=ikd)       :: s
 
-        integer(kind=ikd)        :: s
+        type(gas), allocatable  :: rates(:)   ! Set of output rates (can be negative)
+        type(gas)               :: sInRate    ! in at s = out at s+1
 
-        type(gas), allocatable :: rates(:)  ! The set of output rates (all scales)
-        
-        class(gsh)             :: this
+        class(gsh)              :: this
         !
-        ! Create the set of output rates
+        ! Create the set of global evolution rates
         allocate(rates(nScales))
-        ! Set values
-        do s = 1, nScales
-            rates(s) = this%cascade(s)%status()
+        ! Init
+        call sInRate%create()
+        ! Set values, run from the largest to the lowest scale
+        do s = nScales, 1, -1
+            ! The largest scale can only be fed by external input
+            ! Here sInRate is null for s = nScale
+            rates(s) = sInRate - this%cascade(s)%status()
+            ! Bkp current scale status (current output) for the next scale
+            sInRate = this%cascade(s)%status()
         end do
 
     end function gsh_status
 
     ! **********************************
-    function gsh_evolve(this, dt, inRates, outRates) result(gs)
+    function gsh_solve(this, it, dt, status, pStatus) result(gs)
 
-        ! Evolve a gas structuration history by dt
-        ! The gas structuration cascade evolves with:
-        !  - A set of input rates "inRates", 
-        !    (external input at the scale "l" is already included)
-        ! - A set of output rates "outRates"
+        ! Apply one solver step
 
         implicit none
-    
-        integer(kind=ikd)                      :: s
 
-        real(kind=rkd), intent(in)          :: dt          ! The time-step
-        real(kind=rkd)                      :: mass        ! The updated total mass of the gsh
-        real(kind=rkd)                      :: ll          ! The largest occupied scale
+        integer(kind=ikd), intent(in)       :: it         ! Current solver iteration
+        integer(kind=ikd)                   :: s
 
-        type(gas), intent(in), allocatable  :: inRates(:)  ! The input rate
-        type(gas), intent(in), allocatable  :: outRates(:) ! The set of output rates
-        type(gas)                           :: sInRate     ! local input rate
+        real(kind=rkd), intent(in)          :: dt         ! Full time step
 
-        type(gsh)                           :: gs          ! The evolved gsh
+        type(gas), intent(in), allocatable  :: status(:)  ! Set of current global evolution rate
+        type(gas), pointer                  :: pStatus(:) ! Pointer to the current corrected scale status
 
-        class(gsh)                          :: this        ! The current gsh
+        type(gsh)                           :: gs         ! The new intermediate scale evolution
 
-        ! Init gs structure from current
+        class(gsh)                          :: this       ! The current scale
+
         gs = this
-        ! Init sInRate
-        call sInRate%create()
-        !
-        ! Loop over scales from the largest to the lowest
-        mass = 0. ! Init the total mass
-        do s = nScales, 1, -1
-            !
-            ! Take into account internal transfer rates
-            ! The largest scale if only fed by external input
-            if (s < nScales) then
-                sInRate = InRates(s) + outRates(s+1)
-            end if
-            ! Apply evolution at scale s
-            gs%cascade(s) = this%cascade(s)%evolve(dt, sInRate, outRates(s))
-            !
-            ! Update total mass
-            mass = mass + gs%cascade(s)%gas%mass
-            !
-            ! Update the largest occupied scale
-            if ((mass > 0.) .and. (ll < gs%cascade(s)%l)) then
-                ll = gs%cascade(s)%l
-            end if
+        do s = 1, nScales
+            gs%cascade(s) = this%cascade(s)%solve(it, dt, status(s), pStatus(s))
         end do
-        !
-        ! Set new total gas mass
-        gs%mass = mass
-        ! Set new largest occupied scale
-        gs%l = ll
 
-    end function gsh_evolve
+    end function gsh_solve
 
 end module gsh_mod

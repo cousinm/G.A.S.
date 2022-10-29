@@ -2,7 +2,7 @@
 # COUSIN Morgane
 #
 # Integration scheme
-intScheme       = RK2       ! RK2 or RK4
+solver          = RK2       ! RK2 or RK4
 #
 # Scale parameters
 lStar           = 0.1       ! Specific star formation scale [pc]

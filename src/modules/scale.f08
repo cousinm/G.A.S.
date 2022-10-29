@@ -37,9 +37,15 @@ module scale_mod
         procedure   :: sV => scale_get_velocity_dispersion  ! Get the scaled velocity dispersion
         procedure   :: mu => scale_get_mass_surface_density ! Get the scaled mass surface density
         procedure   :: status => scale_status               ! Get the output rate of the scale
-        procedure   :: evolve => scale_evolve               ! Evolve the scale during dt
-        procedure   :: solve => scale_solve                 ! Solve the input output system during dt
+        procedure   :: update => scale_update               ! Update the scale during dt
+        procedure   :: solve => scale_solve                 ! Solve, for dt, the next step of the integration scheme
+        procedure   :: stevolve => scale_stevolve           ! Evolve, for dt, the next step of the integration scheme
+        procedure   :: evolve => scale_evolve               !         according to internal/external input/output
     end type scale
+
+    ! TEMPORARY INTERMEDIATE STATUS
+    ! Targets
+    type(gas), target     :: sclStatus
 
     ! INTERFACE OPERATOR DECLARATIONS
 
@@ -62,6 +68,9 @@ contains
 
         ! Init dependencies
         call gas_init()
+
+        ! Init temporary intermediate status
+        call sclStatus%create()
 
         ! Unit conversion
         ! Initialy lStar is given in pc
@@ -201,66 +210,73 @@ contains
     end subroutine scale_isValid
 
     ! **********************************
-    subroutine scale_solve(this, dt, inRate)
+    subroutine scale_stevolve(this, dt, st, inRate, outRate, pStatus, pScl)
 
-        ! Solve the evolution of the current scale structure during dt
-        !  according to a constant input rate "inRate"
+        ! Compute current status of the scale structure
+        ! according to :
+        ! - Internal evolution processes
+        ! - A constant input rate (due to external process) "inRate" and
+        ! - A constant output rate (due to external process) "outRate"
+        ! Then
+        ! Apply the next step "st" of the complete integration scheme
 
         implicit none
 
-        real(kind=rkd)        :: dt       ! The scale is evolve during dt
+        integer(kind=ikd), intent(in)  :: st         ! Step index of evolution scheme
+        real(kind=rkd), intent(in)     :: dt         ! The scale is evolve during dt
 
-        type(gas), intent(in) :: inRate   ! The (dt-)constant input rate
-        type(gas)             :: outRate  ! The corrected output rate
-        type(gas)             :: outRate1 ! Intermediates output rates
-        type(gas)             :: outRate2
-        type(gas)             :: outRate3
-        type(gas)             :: outRate4
-        type(scale)           :: scl_tmp  ! Intermediate states of the scale
+        type(gas), intent(in)          :: inRate     ! The (dt-)constant input rate
+        type(gas), intent(in)          :: outRate    ! The (dt-)constant output rate
+        type(gas)                      :: status     ! Current status
+        type(gas), pointer             :: pStatus    ! Pointer to the corrected status
 
-        class(scale)          :: this     ! The current scale
+        type(scale), pointer           :: pScl        ! Pointer to the current intermediate evolved scale
 
-        ! Get curent status
-        outRate1 = this%status()
-        ! Performed evolution for dt/2
-        scl_tmp = this%evolve(dt/2.d0, inRate, outRate1)
-        !
-        select case (trim(intScheme))
-            !
-            case ('RK4')
-                ! Range-Kutta 4th order
-                ! Get curent status
-                outRate2 = scl_tmp%status()
-                ! Get second intermediate state
-                scl_tmp = this%evolve(dt/2.d0, inRate, outRate2)
-                outRate3 = scl_tmp%status()
-                ! Get last intermediate state
-                scl_tmp = this%evolve(dt, inRate, outRate3)
-                outRate4 = scl_tmp%status()
-                ! Perform complete (corrected) evolution
-                outRate = real(1.d0/6.d0,kind=rkd)*(outRate1 + &
-                                     real(2.d0,kind=rkd)*outRate2 + &
-                                     real(2.d0,kind=rkd)*outRate3 + outRate4)
-                ! Final evolution with corrected output rate
-                this = this%evolve(dt, inRate, outRate)
-            case default
-                ! Range-Kutta 2d order
-                ! Get intermedite status
-                outRate = scl_tmp%status()
-                ! Perform complete (corrected) evolution
-                this = this%evolve(dt, inRate, outRate)
-        end select
-        !
-        ! Delete temporary gas object
-        call outRate%delete()
-        call outRate1%delete()
-        call outRate2%delete()
-        call outRate3%delete()
-        call outRate4%delete()
-        ! And scale temporary object
-        call scl_tmp%delete()
+        class(scale)                   :: this       ! The current scale
 
-    end subroutine scale_solve
+        ! Compute current global status due to
+        ! Internal process + external input/output
+        status = inRate - outRate - pScl%status()
+        ! Apply one more solver step and update the current intermediate stage
+        pScl = this%solve(st, dt, status, pStatus)
+
+    end subroutine scale_stevolve
+
+    ! **********************************
+    subroutine scale_evolve(this, dt, inRate, outRate)
+
+        ! Evolve, during dt, the current scale structure 
+        ! according to :
+        ! - Internal evolution processes
+        ! - A constant input rate (due to external process) "inRate" and
+        ! - A constant output rate (due to external process) "outRate"
+
+        implicit none
+
+        integer(kind=ikd)              :: st         ! Step index of evolution scheme
+        real(kind=rkd), intent(in)     :: dt         ! The scale is evolve during dt
+
+        type(gas), intent(in)          :: inRate     ! The (dt-)constant input rate
+        type(gas), intent(in)          :: outRate    ! The (dt-)constant output rate
+        type(gas), pointer             :: pStatus    ! Pointer to the corrected status
+
+        type(scale), target            :: scl        ! The current intermediate evolved scale
+        type(scale), pointer           :: pScl       ! Pointer to the curretn evolved scale
+
+        class(scale)                   :: this       ! The current scale
+
+        ! Init intermediate status with the current status
+        scl = this
+        pScl => scl
+        ! Define complete corrected status
+        pStatus => sclStatus
+        do st = 1, nSolverStep
+            call this%stevolve(dt, st, inRate, outRate, pStatus, pScl)
+        end do
+        ! Save complete evolved state
+        this = scl
+
+    end subroutine scale_evolve
 
     !
     ! FUNCTIONS
@@ -340,17 +356,17 @@ contains
     ! **********************************
     function scale_status(this) result(rate)
 
-        ! Return the current output rate of the scale
+        ! Return the current status of the scale
+        ! according to its internal evolution only
 
-        real(kind=rkd)   :: vRate
+        real(kind=rkd)         :: vRate
 
-        type(gas)        :: rate
+        type(gas)              :: rate     ! Global evolution rate
 
-        class(scale)     :: this
+        class(scale)           :: this
 
         ! Transfer mass to the lower scale is only possible
         ! if the current scale is unstable (this%nClouds() > 0)
-        
         vRate = 3.d0/2.d0 * ETRV * this%volume() / this%sV()**2. * this%nClouds()
         !
         ! The output rate gas object is build according to the gas signature
@@ -359,34 +375,101 @@ contains
     end function scale_status
 
     ! **********************************
-    function scale_evolve(this, dt, inRate, outRate) result(scl)
+    function scale_update(this, dt, rate) result(scl)
 
-        ! Evolve the scale structure during dt according to an
+        ! Update the scale structure during dt according to an
         ! global evolution rate "rate"
 
         implicit none
 
-        character(MAXPATHSIZE) :: calledBy !
+        character(MAXPATHSIZE)   :: calledBy
 
         real(kind=rkd)           :: dt       ! The scale is evolve during dt
 
-        type(gas), intent(in)  :: inRate   ! The input rate
-        type(gas), intent(in)  :: outRate  ! The output rate
+        type(gas), intent(in)    :: rate     ! The global evolution rate (can be negative)
 
-        class(scale)           :: this     ! The current scale
-        type(scale)            :: scl      ! The evolved scale
+        type(scale)              :: scl      ! The evolved scale
+
+        class(scale)             :: this     ! The current scale
 
         ! Copy of the current scale
         scl = this
+        !
         ! Evolution
-        call scl%add(dt*inRate)  ! Add input
-        call scl%sub(dt*outRate) ! Substract output
+        call scl%add(dt * rate)
         !
         ! Test the validity of the current scale
-        write(calledBy, '(a)') 'scale_evolve'
+        write(calledBy, '(a)') 'scale_update'
         call scl%isValid(calledBy)
 
-    end function scale_evolve
+    end function scale_update
+
+    ! **********************************
+    function scale_solve(this, it, dt, status, pStatus) result(scl)
+
+        ! Apply one solver step
+
+        implicit none
+
+        integer(kind=ikd), intent(in)   :: it       ! Current solver iteration
+
+        real(kind=rkd)                  :: w
+        real(kind=rkd), intent(in)      :: dt       ! Full time step
+
+        type(gas), intent(in)           :: status   ! Current global evolution rate
+        type(gas), intent(in), pointer  :: pStatus  ! Pointer to the corrected status
+
+        type(scale)                     :: scl      ! The new intermediate scale evolution
+
+        class(scale)                    :: this     ! The current scale
+
+        select case (trim(solver))
+        case ('RK4')
+            ! Range-Kutta 4th order
+            select case (it)
+            case (1)
+                ! Reset corrected status with status 1
+                w = real(1.d0, kind=rkd)/real(6.d0, kind=rkd)
+                pStatus = w*status
+                ! Update by dt/2. using status 1
+                scl = this%update(dt/real(2.d0, kind=rkd), status)
+            case (2)
+                ! Update corrected status with status 2
+                w = real(2.d0, kind=rkd)/real(6.d0, kind=rkd)
+                pStatus = pStatus + w*status
+                ! Update by dt/2. using status 2
+                scl = this%update(dt/real(2.d0, kind=rkd), status)
+            case (3)
+                ! Update corrected status with status 3
+                w = real(2.d0, kind=rkd)/real(6.d0, kind=rkd)
+                pStatus = pStatus + w*status
+                ! Update by dt using status 3
+                scl = this%update(dt, status)
+            case (4)
+                ! Final step
+                ! Update corrected status with status 4
+                w = real(1.d0, kind=rkd)/real(6.d0, kind=rkd)
+                pStatus = pStatus + w*status
+                ! Update by dt using complete corrected sclStatus
+                scl = this%update(dt, pStatus)
+            end select
+        case default
+            ! Range-Kutta 2d order
+            select case (it)
+            case (1)
+                ! Reset corrected status with status 1
+                pStatus = status
+                ! Update by dt/2. using status 1
+                scl = this%update(dt/real(2.d0, kind=rkd), status)
+            case (2)
+                ! Reset corrected status with status 2
+                pStatus = status
+                ! Update by dt using complete corrected sclStatus
+                scl = this%update(dt, pStatus)
+            end select
+        end select
+
+    end function scale_solve
 
 end module scale_mod
 

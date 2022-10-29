@@ -36,12 +36,16 @@ contains
 
         character(MAXPATHSIZE)     :: filename
 
+        real(kind=rkd)             :: tstart, tend
+
         ! Open log file for these tests
         write(filename,'(a, a)') trim(validPath), '/scale_tests.log'
         open(unit=u, file=filename, status='new')
 
+        call cpu_time(tstart)
         isValid = test_scale_constant_injection()
-        write(u, '(a,l)') 'test_scale_constant_injection: ', isValid
+        call cpu_time(tend)
+        write(u, '(a,f7.3,a,l)') 'test_scale_constant_injection (', tend-tstart, ' sec): ', isValid
 
         ! Close log file
         close(u)
@@ -70,11 +74,13 @@ contains
         real(kind=rkd)                 :: t
 
         type(gas)                    :: inRate  ! The constant injection rate
+        type(gas)                    :: outRate ! The constant ejection rate
         type(scale)                  :: scl     ! A gas scale
 
         isValid = .FALSE.
 
         inRate = 1.d1 * MassRate_CU * initAbund(nMetBins)  ! 10Msun/yr in CU
+        call outRate%create()  ! null
 
         ! Create a scale
         call scl%create(l)
@@ -90,7 +96,7 @@ contains
             write(u, *) scl%nClouds(), scl%gas%mass, scl%gas%mZ, scl%gas%Eint, &
                         scl%gas%elts(1), scl%gas%elts(2), scl%gas%elts(3), &
                         scl%gas%elts(4), scl%gas%elts(5), scl%gas%elts(6)
-            call scl%solve(dt, inRate)
+            call scl%evolve(dt, inRate, outRate)
             t = t + dt
         end do
 
