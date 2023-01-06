@@ -90,12 +90,12 @@ contains
         integer(kind=ikd), intent(in), optional    :: logLevel         ! log Level (info, warning, error)
         integer(kind=ikd), intent(in), optional    :: intParams(:)     ! values of physical parameters (integer format)
 
-        character(*), intent(in)                 :: message          ! the message
-        character(*), intent(in), optional       :: calledBy         ! trace back of the error message
-        character(30)                            :: space            ! indentation
-        character(18)                            :: currentTime      ! current time
-        character(12)                            :: lLevel           ! log level
-        character(25), intent(in), optional      :: paramNames(:)    ! name of physical parameters
+        character(*), intent(in)                   :: message          ! the message
+        character(*), intent(in), optional         :: calledBy         ! trace back of the error message
+        character(30)                              :: space            ! indentation
+        character(18)                              :: currentTime      ! current time
+        character(12)                              :: lLevel           ! log level
+        character(25), intent(in), optional        :: paramNames(:)    ! name of physical parameters
 
         real(kind=rkd), intent(in), optional       :: realParams(:)    ! values of physical parameters (real format)
         real(kind=rkd)                             :: time             ! current time

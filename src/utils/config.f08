@@ -26,6 +26,8 @@ module config_mod
     integer(kind=ikd), parameter   :: massLoss_unit = 113
     ! File unit for SN rates input data file
     integer(kind=ikd), parameter   :: snRate_unit = 114
+    ! File unit for SSP SED input data file
+    integer(kind=ikd), parameter   :: spsed_unit = 115
 
     ! Main directories path
     character(MAXPATHSIZE)       :: validPath

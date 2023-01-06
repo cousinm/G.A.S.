@@ -53,8 +53,10 @@ utils:
 
 modules: 
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)gas.f08
+	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)status.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)scale.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)gsh.f08
+	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)ssp.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)sp.f08
 
 test_modules:

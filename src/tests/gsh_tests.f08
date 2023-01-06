@@ -41,6 +41,11 @@ contains
         write(filename,'(a, a)') trim(validPath), '/gsh_tests.log'
         open(unit=u, file=filename, status='new')
 
+        call cpu_time(tstart)
+        isValid = test_gsh_i2l_and_l2i()
+        call cpu_time(tend)
+        write(u, '(a,f7.3,a,l)') 'test_gsh_i2l_and_l2i (', tend-tstart, ' sec): ', isValid
+
         isValid = test_gsh_create()
         write(u, '(a,l)') 'test_gsh_create: ', isValid
 
@@ -84,6 +89,9 @@ contains
         else if (.not. allocated(g%cascade)) then
             isValid = .FALSE.
         end if
+        if (.not. g%sfr%isCreated()) then
+            isValid = .FALSE.
+        end if
 
     end function test_gsh_create
 
@@ -106,8 +114,43 @@ contains
         else if (allocated(g%cascade)) then
             isValid = .FALSE.
         end if
+        if (g%sfr%isCreated()) then
+            isValid = .FALSE.
+        end if
 
     end function test_gsh_delete
+
+    ! **********************************
+
+    function test_gsh_i2l_and_l2i() result(isValid)
+
+        implicit none
+
+        integer(kind=ikd) :: il, il_test
+
+        logical           :: isValid
+
+        real(kind=rkd)    :: li, li_test
+
+        isValid = .TRUE.
+        il = 1
+        li = gsh_i2l(il)
+        il_test = gsh_l2i(li)
+        if (il_test /= il) then
+            isValid = .FALSE.
+            return
+        end if
+
+        li = real(1.d2, kind=rkd)*pc2kpc
+        il = gsh_l2i(li)
+        li_test = gsh_i2l(il)
+        if (il < nScales .and. li_test < li)  then
+            isValid = .FALSE.
+            return
+        end if
+
+        return
+    end function test_gsh_i2l_and_l2i
 
     ! **********************************
     function test_gsh_constant_injection() result(isValid)
@@ -125,12 +168,15 @@ contains
         real(kind=rkd), parameter    :: dt = real(1.d-4, kind=rkd)       ! CU [Gyr]
         real(kind=rkd), parameter    :: evolTime = real(1.d0, kind=rkd)  ! CU [Gyr]
         real(kind=rkd)               :: t
+        real(kind=rkd)               :: solution, diff
 
-        type(gas)                    :: inRate  ! The constant injection rate at scale l
-        type(gas), allocatable       :: outRates(:) 
-        type(gsh)                    :: gs      ! gas structuration history
+        type(gas)                    :: inRate       ! The constant injection rate at scale l
+        type(gas), allocatable       :: outRates(:)  ! Output rates (due to external process = 0 here)
+        type(gas)                    :: ejGas        ! Gas ejected from the gsh, dt * SFR
 
-        isValid = .FALSE.
+        type(gsh)                    :: aGsh         ! A gas structuration history
+
+        isValid = .TRUE.
 
         ! Create input rate
         inRate = real(1.d1, kind=rkd) * MassRate_CU * initAbund(nMetBins)  ! 10Msun/yr in CU
@@ -142,24 +188,48 @@ contains
         end do
 
         ! Create a scale
-        call gs%create()
+        call aGsh%create()
+        ! Create gas reservoir
+        call ejGas%create()
 
         ! Open data files for this test
         ! Save each scale in a dedicated file
         do s = 1, nScales
             write(filename, '(a,a,i2.2,a)') trim(validPath), '/gsh_test_constant_injection_s', s, '.dat'
             open(unit=u+s, file=filename, status='new')
-            write(u+s, '(a)') '# t | mass | ll | Vesc [km/s] | nClouds(s) | mass(s)'
+            write(u+s, '(a)') '# t | mass | ll | Vesc [km/s] | nClouds(s) | mass(s) | Ms '
         end do
+        ! Create a other main test file for mass conservation test
+        write(filename, '(a,a)') trim(validPath), '/gsh_test_constant_injection.dat'
+        open(unit=u, file=filename, status='new')
+        write(u, '(a)') '# t | gsh mass | ej gas mass [CU] | solution | diff'
 
         ! Evolution
-        t = 0.d0 ! init
+        t = 0.d0         ! init
+        solution = 0.d0  ! init
+        diff = 0.d0      ! init
         do while (t < evolTime)
+            !
             ! Save each scale in a dedicated file
             do s = 1, nScales
-                write(u+s, *) t, gs%mass, gs%l, gs%Vesc()*Velocity_km_s, gs%cascade(s)%nClouds(), gs%cascade(s)%gas%mass
+                write(u+s, *) t, aGsh%mass, aGsh%l, aGsh%Vesc()*Velocity_km_s, aGsh%cascade(s)%nClouds(), aGsh%cascade(s)%gas%mass, ejGas%mass
             end do
-            call gs%evolve(dt, l, inRate, outRates)
+            write(u, *) t, aGsh%mass, ejGas%mass, solution, diff
+            !
+            ! Compute evolution
+            call aGsh%evolve(dt, l, inRate, outRates)
+            !
+            ! Compute real solution
+            solution = solution + inRate%mass * dt
+            !
+            ! Update ejected gas reservoir
+            ejGas = ejGas + dt * aGsh%sfr
+            !
+            ! Test, mass conservation
+            diff = abs(ejGas%mass + aGsh%mass - solution)
+            if (diff > num_accuracy) then
+                isValid = .FALSE.
+            end if
             t = t + dt
         end do
 
@@ -167,23 +237,23 @@ contains
         do s = 1, nScales
             close(u+s)
         end do
+        close(u)
 
         ! Delete structures
-        call gs%delete()
+        call aGsh%delete()
         call inRate%delete()
+        call ejGas%delete()
         do s = 1, nScales
             call outRates(s)%delete()
         end do
         deallocate(outRates)
-
-        isValid = .TRUE.
 
     end function test_gsh_constant_injection
 
     ! **********************************
     function test_gsh_constant_and_stop_injection() result(isValid)
 
-    implicit none
+        implicit none
 
         integer(kind=ikd)              :: s
         integer(kind=ikd), parameter   :: u = 10000        ! file unit
@@ -196,12 +266,15 @@ contains
         real(kind=rkd), parameter    :: dt = real(1.d-4, kind=rkd)       ! CU [Gyr]
         real(kind=rkd), parameter    :: evolTime = real(1.d0, kind=rkd)  ! CU [Gyr]
         real(kind=rkd)               :: t
+        real(kind=rkd)               :: solution, diff
 
         type(gas)                    :: inRate  ! The constant injection rate at scale l
         type(gas), allocatable       :: outRates(:) 
-        type(gsh)                    :: gs      ! gas structuration history
+        type(gas)                    :: ejGas   ! Gas ejected from the gsh
 
-        isValid = .FALSE.
+        type(gsh)                    :: aGsh    ! gas structuration history
+
+        isValid = .TRUE.
 
         ! Create input rate
         inRate = real(1.d1, kind=rkd) * MassRate_CU * initAbund(nMetBins)  ! 10Msun/yr in CU
@@ -212,26 +285,51 @@ contains
             call outRates(s)%create()
         end do
 
-        ! Create a scale
-        call gs%create()
+        ! Create a gas structuration history
+        call aGsh%create()
+        ! Create gas reservoir
+        call ejGas%create()
 
         ! Open data files for this test
         ! Save each scale in a dedicated file
         do s = 1, nScales
-            write(filename, '(a,a,i2.2,a)') trim(validPath), '/gsh_test_constant_and_stop_injection_s', s, '.dat'
+            write(filename, '(a,a,i2.2,a)') trim(validPath), '/gsh_test_constant_injection_and_stop_s', s, '.dat'
             open(unit=u+s, file=filename, status='new')
-            write(u+s, '(a)') '# t | mass | ll | Vesc [km/s] | nClouds(s) | mass(s)'
+            write(u+s, '(a)') '# t | mass | ll | Vesc [km/s] | nClouds(s) | mass(s) | Ms '
         end do
+        ! Create a other main test file for mass conservation test
+        write(filename, '(a,a)') trim(validPath), '/gsh_test_constant_injection_and_stop.dat'
+        open(unit=u, file=filename, status='new')
+        write(u, '(a)') '# t | gsh mass | ej gas mass [CU] | solution | diff'
 
         ! Evolution
-        t = 0.d0 ! init
+        t = 0.d0         ! init
+        solution = 0.d0  ! init
+        diff = 0.d0      ! init
         do while (t < evolTime)
+            !
+            if (t > 8.d-1) inRate = real(0.d1, kind=rkd) * initAbund(nMetBins)
+            !
             ! Save each scale in a dedicated file
             do s = 1, nScales
-                write(u+s, *) t, gs%mass, gs%l, gs%Vesc()*Velocity_km_s, gs%cascade(s)%nClouds(), gs%cascade(s)%gas%mass
+                write(u+s, *) t, aGsh%mass, aGsh%l, aGsh%Vesc()*Velocity_km_s, aGsh%cascade(s)%nClouds(), aGsh%cascade(s)%gas%mass, ejGas%mass
             end do
-            if (t > 8.d-1) inRate = real(0.d1, kind=rkd) * initAbund(nMetBins)
-            call gs%evolve(dt, l, inRate, outRates)
+            write(u, *) t, aGsh%mass, ejGas%mass, solution, diff
+            !
+            ! Compute evolution
+            call aGsh%evolve(dt, l, inRate, outRates)
+            !
+            ! Compute real solution
+            solution = solution + inRate%mass * dt
+            !
+            ! Update ejected gas reservoir
+            ejGas = ejGas + dt * aGsh%sfr
+            !
+            ! Test, mass conservation
+            diff = abs(ejGas%mass + aGsh%mass - solution)
+            if (diff > num_accuracy) then
+                isValid = .FALSE.
+            end if
             t = t + dt
         end do
 
@@ -239,16 +337,16 @@ contains
         do s = 1, nScales
             close(u+s)
         end do
+        close(u)
 
         ! Delete structures
-        call gs%delete()
+        call aGsh%delete()
         call inRate%delete()
+        call ejGas%delete()
         do s = 1, nScales
             call outRates(s)%delete()
         end do
         deallocate(outRates)
-
-        isValid = .TRUE.
 
     end function test_gsh_constant_and_stop_injection
 
