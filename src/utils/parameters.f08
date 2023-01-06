@@ -22,7 +22,7 @@ module parameters
     integer(kind=ikd), parameter :: MAXPATHSIZE       = 2048
     !
     ! Mathematical constants 
-    real(kind=rkd), parameter    :: pi                = 3.141592653589793238d0                                   ! Just pi
+    real(kind=rkd), parameter    :: pi                = 3.141592653589793238d0   ! Just pi
     real(kind=rkd), parameter    :: num_accuracy      = 1.e-11
     ! 
     ! Physical constants
@@ -41,7 +41,7 @@ module parameters
     !
     ! Units conversions & conversion factor 
     real(kind=rkd), parameter    :: Mass2Msun         = 1.d11               ! 1 mass code unit in MSun
-    real(kind=rkd), parameter    :: MSun2mass         = 1.d0/mass2Msun      ! 1 MSun in code unit           
+    real(kind=rkd), parameter    :: MSun2mass         = 1.d0/Mass2Msun      ! 1 MSun in code unit           
     real(kind=rkd), parameter    :: Mass_kg           = Mass2Msun*MSun      ! 1 mass code unit in kg (~ 1.989 10^41 kg)
     real(kind=rkd), parameter    :: kpc2m             = 3.0856776d19        ! 1 kpc in m
     real(kind=rkd), parameter    :: pc2cm             = 3.0856776d18        ! 1 pc in cm

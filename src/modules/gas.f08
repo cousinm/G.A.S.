@@ -43,8 +43,8 @@ module gas_mod
     end type gas
 
     ! Define gas specific parameters
-    integer(kind=ikd)                 :: nElts         ! Number of Main ISM elements followed
-    integer(kind=ikd)                 :: nMetBins      ! Number of metallicity bins used
+    integer(kind=ikd)               :: nElts         ! Number of Main ISM elements followed
+    integer(kind=ikd)               :: nMetBins      ! Number of metallicity bins used
     !
     character(len=4), allocatable   :: eltNames(:)   ! List of main ISM elements followed (e.g H1, He, C12, N14, O16, Fe56)
     !
@@ -169,8 +169,10 @@ contains
         this%mass = 0.  ! Total mass
         this%mZ  = 0.   ! Metal mass
         this%Eint = 0.  ! Internal energy
-        
-        allocate(this%elts(nElts))  ! create
+
+        if (.not. allocated(this%elts)) then
+            allocate(this%elts(nElts))  ! create
+        end if
         this%elts = 0.  ! Specific element mass
     
     end subroutine gas_create

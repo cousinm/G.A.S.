@@ -14,6 +14,7 @@ module sp_mod
     use parameters  ! Acces to global defintions and properties
     use model_mod   ! Acces to model parameters and integration scheme configuration
     use gas_mod     ! Acces to gas properties and procedures
+    use ssp_mod     ! Acess to single stellar populations methods ans properties
     use config_mod  ! Acces to configurations parameters (path)
 
     implicit none
@@ -23,16 +24,6 @@ module sp_mod
     ! A complete stellar population is built from a set of single stellar population
     !   A ssp evolved in a set of age and metalicity bin
     !
-    ! Single stellar population
-    type ssp
-        real(kind=rkd)     :: mass   ! Mass of the ssp
-        real(kind=rkd)     :: tform  ! Formation time
-        real(kind=rkd)     :: avgAge ! Average age of the sp
-    contains
-        procedure    :: create => ssp_create  ! Create/Init a ssp
-        procedure    :: evolve => ssp_evolve  ! Evolve a sap during dt
-    end type ssp
-
     ! Complete stellar population
     type sp
         real(kind=rkd)           :: mass          ! Total mass of the stellar population
@@ -46,26 +37,21 @@ module sp_mod
         procedure  :: delete => sp_delete         ! Delete a stellar population structure
         procedure  :: copy => sp_copy             ! Copy a stellar population structure
         procedure  :: isCreated => sp_isCreated   ! Test if sp object is already created
+        procedure  :: stevolve => sp_stevolve     ! 
         procedure  :: evolve => sp_evolve         ! Evolve a stellar population structure by dt
-        procedure  :: status => sp_status         ! Return the current status (outRates) of a stellar population
-        procedure  :: transfer => sp_transfer     ! Transfer mass from an ageBin to the next one
-        procedure  :: solve => sp_solve           ! Solve the input output system during dt
     end type sp
 
-    ! Define ssp and sp specific parameters
-    integer(kind=ikd)           :: nAgeBins            ! Number of stellar are bins
+    ! Define sp specific parameters
+    real(kind=rkd), allocatable :: gas2sp(:, :)   ! gas to sp matrix conversion, based on abundancies
 
-    real(kind=rkd), allocatable :: ageBins(:)          ! Age bin values
-    real(kind=rkd)              :: spTimeStep          ! Minimal stellar evolution time step
-    real(kind=rkd), allocatable :: SNRates(:, :)       ! SN Rates according to age and metalicity
-    real(kind=rkd), allocatable :: gas2sp(:, :)        ! gas to sp matrix conversion, based on abundancies
-
-    type(gas), allocatable    :: massLossRates(:, :) ! Ejection rates according to age and metlicity
+    ! TEMPORARY INTERMEDIATE STATUS
+    ! Targets
+    type(status), allocatable, target :: spStatus(:, :)
 
     ! INTERFACE OPERATOR DECLARATIONS
 
     interface assignment (=)  ! allows to copy a sp component by using the symbol '='
-        module procedure sp_copy, ssp_copy
+        module procedure sp_copy
     end interface assignment (=)
 
 contains
@@ -75,38 +61,6 @@ contains
     !
 
     ! **********************************
-    subroutine ssp_create(this)
-
-        ! Initialize a single stellar population
-
-        implicit none
-
-        class(ssp)   :: this
-
-        this%mass   = 0.d0
-        this%avgAge = 0.d0
-        this%tform  = 0.d0
-
-    end subroutine ssp_create
-
-    ! **********************************
-    subroutine ssp_copy(ssp1, ssp2)
-
-        ! Copy a ssp object ssp2 into the ssp object ssp1
-
-        implicit none
-
-        type(ssp), intent(in)      :: ssp2
-
-        class(ssp), intent(inout)  :: ssp1
-
-        ssp1%mass   = ssp2%mass
-        ssp1%avgAge = ssp2%avgAge
-        ssp1%tform  = ssp1%tform
-
-    end subroutine ssp_copy
-
-    ! **********************************
     subroutine sp_init()
 
         ! Initialize the sp module and dependancies
@@ -114,214 +68,54 @@ contains
 
         implicit none
 
-        ! Read mass loss rates
-        call sp_read_mass_loss_rates()
-
-        ! Read SN Rates
-        call sp_read_SN_rates()
-
-        ! Build gas to stellar population conversion matrix
-        call sp_build_gas2sp_matrix()
-
-    end subroutine sp_init
-
-    ! **********************************
-    subroutine sp_read_mass_loss_rates
-
-        ! Read the mass loss rates for a stellar population of given age and metallicity
-        ! The model used is linked to the initial mass function used
-    
-        implicit none
-        
-        integer(kind=ikd)          :: nMetBins_    ! tmp nMetBins, 
-                                                 !   allows to compared values read here with 
-                                                 !   nMetBins data used/saved in the gas module
-        integer(kind=ikd)          :: nElts_       ! tmp nElts
-                                                 !   allows to compared values read here with 
-                                                 !   nElts data used/saved in the gas module
-        integer(kind=ikd)          :: i            ! loop index for stellar age
-        integer(kind=ikd)          :: j            ! loop index for metalicity
-        integer(kind=ikd)          :: e            ! loop index for elements
-        
-        character(MAXPATHSIZE)   :: filename
-        character(MAXPATHSIZE)   :: message
-        character(MAXPATHSIZE)   :: line
-    
-        ! Build the input filename, according to the initial mass function (IMF)
-        write(filename,'(a,a,a,a)') trim(stellarPopPath), '/sp_mass_loss_rates[BC03]_', trim(IMF), '.in'
-        write(message,'(a,a)') 'Load data from: ', trim(filename)
-        call log_message(message)
-        !
-        ! Open the file
-        open(unit=massLoss_unit, file=trim(filename), status='old')
-        ! Read and load data
-        do
-            read(massLoss_unit, '(a)', end=2) line
-            if (trim(line) .eq. '----') then
-                !
-                ! After the header lines:
-                ! Read nAgeBins  : Number of stellar age bin used in the stellar population model
-                ! Read nMetBins  : Number of metallicity bins used in the stellar population model
-                ! Read nElts     : Number of elements followed by the stellar population model (C,N,O,Fe)
-                read(massloss_unit,*) nAgeBins, nMetBins_, nElts_
-                !
-                ! Test nMetBins and nElts already saved in the gas module
-                if (nMetBins_ .ne. nMetBins) then
-                    call log_message('Inconsistency between metalicity bin counts st .vs. gas', &
-                                     logLevel=LOG_ERROR, calledBy='sp_read_mass_loss_rates')
-                endif
-                !
-                if (nElts_ .ne. nElts) then
-                    call log_message('Inconsistency between elements counts st .vs. gas', &
-                                     logLevel=LOG_ERROR, calledBy='sp_read_mass_loss_rates')
-                end if
-                !
-                read(massLoss_unit,*) ! Skip the line with Metallicity bins, these data are already saved in the gas module
-                !
-                ! Allocate arrays
-                ! Metalicity bins and element names are already saved in the gas module
-                ! Allocate stellar age (Gyr) table corresponding to each step of the stellar model used
-                allocate(ageBins(nAgeBins))
-                ! 
-                ! Allocate the massLossRate table,
-                ! Storing ejecta rates associated to elements (H, He, C, N, O and Fe) [CU]
-                allocate(massLossRates(nAgeBins, nMetBins))
-                !
-                do i = 1, nAgeBins
-                    do j = 1, nMetBins
-                        call massLossRates(i, j)%create() ! Init
-                    end do                 
-                    ! For each stellar age bin read:
-                    !  - The age of the population,
-                    !  - The mass loss rate 
-                    !  - The yield of each elements
-                    read(massLoss_unit,*) AgeBins(i), &
-                                          (massLossRates(i, j)%mass, j=1, nMetBins), &
-                                          (massLossRates(i, j)%mZ, j=1, nMetBins), &
-                                          ((massLossRates(i, j)%elts(e), j=1, nMetBins), e=1, nElts)
-                end do
-                !       
-                ! Define spTimeStep
-                ! as the minimal step in the stellar population evolution model
-                spTimeStep= minval(AgeBins(2 : nAgeBins) - AgeBins(: nAgeBins - 1)) 
-                !
-                exit
-            end if
-            if (line(1:1) .eq. '#') then
-                cycle ! Header or something like this (skip)
-            else
-                write(message, '(a, a)') 'Impossible to read a line in ', trim(filename)
-                call log_message(message, &
-                                 logLevel=LOG_ERROR, &
-                                 calledBy='sp_read_mass_loss_rates')
-            end if
-        end do
-2       close(massLoss_unit)
-    
-        return
-    end subroutine sp_read_mass_loss_rates
-
-    ! **********************************
-    subroutine sp_read_SN_rates()
-
-        implicit none
-
-        integer(kind=ikd)          :: nMetBins_    ! tmp nMetBins, 
-                                                 !   allows to compared values read here with 
-                                                 !   nMetBins data used/saved in the gas module
-        integer(kind=ikd)          :: nAgeBins_    ! tmp nAgeBins
-                                                 !   allows to compared values read here with 
-                                                 !   nAgeBins data used/saved in the gas module
-        integer(kind=ikd)          :: i            ! loop index under stellar age
-        integer(kind=ikd)          :: j            ! loop index under metalicity
-
-        character(MAXPATHSIZE)   :: filename
-        character(MAXPATHSIZE)   :: message
-        character(MAXPATHSIZE)   :: line
-
-        real(kind=rkd)             :: aAgeBin      ! a local variable used to read the stellar age
-
-        ! Build the input filename, according to the initial mass function (IMF)
-        write(filename,'(a,a,a,a)') trim(stellarPopPath), '/sp_SN_rates[BC03]_', trim(IMF), '.in'
-        write(message,'(a,a)') 'Load data from: ', trim(filename)
-        call log_message(message)
-        !
-        ! Open the library file
-        open(unit=snRate_unit, file=trim(filename), status='old')
-        ! Read and load data
-        do
-            read(snrate_unit, '(a)', end = 2) line
-            if (trim(line) .eq. '----') then
-                !
-                ! After the header lines:
-                ! Read nAgeBins  : Number of stellar age bin used in the stellar population model
-                ! Read nMetBins  : Number of metallicity bins used in the stellar population model
-                read(snrate_unit,*) nAgeBins_, nMetBins_
-                !
-                ! Test nMetBins, nAgeBins and nElts already saved previously
-                if (nMetBins_ .ne. nMetBins) then
-                    call log_message('Inconsistency between metalicity bin counts st .vs. gas', &
-                                     logLevel=LOG_ERROR, calledBy='sp_read_SN_rates')
-                endif
-                !
-                if (nAgeBins_ .ne. nAgeBins) then
-                    call log_message('Inconsistency between age counts st .vs. gas', &
-                                     logLevel=LOG_ERROR, calledBy='sp_read_SN_rates')
-                end if
-                read(snrate_unit,*) ! skip the line with Metallicity bins, these data are already saved in the gas module
-                !
-                ! allocate arrays  
-                ! SNRates: Number of SN events per Gyr and per Msun [nb/Gyr/Msun]
-                allocate(SNRates(nAgeBins, nMetBins))
-                do i = 1, nAgeBins
-                    ! For each stellar age bin read:
-                    ! - The age of the stellar population
-                    ! - The SN event rate
-                    read(snrate_unit,*) aAgebin, (SNRates(i, j), j=1, nMetBins)
-                end do
-                !
-                ! Convert in code unit
-                ! Initially SN rates are given [nb/Gyr/Msun] convert in Mass CU
-                SNRates(:,:) = SNRates(:, :)/MSun2mass
-                !
-                exit
-            end if
-            if (line(1:1) .eq. '#') then
-                cycle ! Header or something like this (skip)
-            else
-                write(message, '(a, a)') 'Impossible to read a line in ', trim(filename)
-                call log_message(message, &
-                                 logLevel=LOG_ERROR, &
-                                 calledBy='sp_read_SN_rates')
-            end if
-        end do
-2       close(snrate_unit)
-
-    end subroutine sp_read_SN_rates
-
-    ! **********************************
-    subroutine sp_build_gas2sp_matrix()
-
-        ! Build the conversion matrix from gas component to stellar population
-
-        implicit none
-
         integer(kind=ikd)     :: i, j
 
+        ! Init ssp
+        call ssp_init()
+
+        ! Init intermediate status
+        allocate(spStatus(nAgeBins, nMetBins))
+
+        ! Build gas to stellar population conversion matrix
         ! Allocate the matrix
         allocate(gas2sp(nMetBins, nMetBins))
-
+        ! Init it
         do i = 1, nMetBins
             do j = 1, nMetBins
                 if (i == 1) then
                     gas2sp(i, j) = 1.
                 else
-                    gas2sp(i, j) = initAbund(j)%elts(i-1)
+                    gas2sp(i, j) = initAbund(j)%elts(i - 1)
                 end if
             end do
         end do
 
-    end subroutine
+    end subroutine sp_init
+
+    ! **********************************
+    subroutine sp_finalize()
+
+        ! Delete and deallocate all sp objects
+
+        implicit none
+
+        integer(kind=ikd)     :: i, j
+
+        ! Deallocate spStatus
+        if (allocated(spStatus)) then
+            do i = 1, nAgeBins
+                do j = 1, nMetBins
+                    call spStatus(i, j)%delete()
+                end do
+            end do
+            deallocate(spStatus)
+        end if
+
+        ! Build gas to stellar population conversion matrix
+        ! Allocate the matrix
+        if (allocated(gas2sp)) deallocate(gas2sp)
+
+    end subroutine sp_finalize
 
     ! **********************************
     subroutine sp_create(this)
@@ -330,10 +124,10 @@ contains
 
         implicit none
 
-        integer(kind=ikd)       :: i ! Age loop index
-        integer(kind=ikd)       :: j ! Metalicity loop index
+        integer(kind=ikd)    :: iAge ! Age loop index
+        integer(kind=ikd)    :: jMet ! Metalicity loop index
 
-        class(sp)             :: this
+        class(sp)            :: this
 
         this%mass = 0.d0   ! Total mass of the stellar population
         this%mAge = 0.d0   ! Mass-weighted average age
@@ -342,9 +136,9 @@ contains
         this%lZ = 0.d0     ! Luminosity-weighted average metalicity
 
         allocate(this%sfh(nAgeBins, nMetBins)) ! Star Formation History
-        do i = 1, nAgeBins
-            do j = 1, nMetBins
-                call this%sfh(i, j)%create()
+        do iAge = 1, nAgeBins
+            do jMet = 1, nMetBins
+                call this%sfh(iAge, jMet)%create(iAge, jMet)
             end do
         end do
     end subroutine sp_create
@@ -365,6 +159,7 @@ contains
         this%lZ = 0.d0     ! Luminosity-weighted average metalicity
 
         if (allocated(this%sfh)) deallocate(this%sfh)
+
     end subroutine sp_delete
 
     ! **********************************
@@ -402,124 +197,156 @@ contains
     end subroutine sp_copy
 
     ! **********************************
-    subroutine sp_transfer(this, iAge, iMet)
 
-        ! Transfert
+    subroutine sp_stevolve(this, dt, st, inRate, outRate, pStatus, pSp)
+
+        ! Compute current status of the stellar population
+        ! according to :
+        ! - Internal evolution processes
+        ! - A constant input rate (due to external process) "inRate" and
+        !
+        ! No ejection from any external processes can be applied to sp
+        ! Output rate is an output parameter storing wind/sn ejection from the current sp
+        !
+        ! Then
+        ! Apply the next step "st" of the complete integration scheme
+
         implicit none
+    
+        integer(kind=ikd), intent(in)   :: st
+        integer(kind=ikd)               :: iAge, jMet
 
-        integer(kind=ikd), intent(in)  :: iAge  ! Age bin index of the ssp
-        integer(kind=ikd), intent(in)  :: iMet  ! Metalicity bin index of the ssp
+        real(kind=rkd), intent(in)      :: dt             ! The time-step
+        real(kind=rkd)                  :: mass           ! Total stellar mass
+        real(kind=rkd)                  :: mAge           ! mass weighted age
+        real(kind=rkd)                  :: mZ             ! average metalicity
 
-        real(kind=rkd)                 :: m     ! Mass in the bin
-        real(kind=rkd)                 :: dm    ! Mass transfert form a bin to an other
-        real(kind=rkd)                 :: dt    ! time spend over the current age bin
+        type(gas), intent(in)           :: inRate         ! The external input rate (SFR)
+        type(gas), intent(out)          :: outRate        ! Global output rate
+        type(gas)                       :: spOutRate      ! global wind/sn gas ejection rate
+        type(gas)                       :: sspInRate      ! Input rate of the current ssp
+        type(gas)                       :: sspOutRate     ! Wind/sn gas ejection rate of the current ssp
+        type(gas), allocatable          :: inRateBins(:)  ! Gas distribution into metalicity bins
 
-        class(sp)                      :: this  ! The current ssp
+        type(ssp), pointer              :: pSsp           ! Pointer to the current ssp stage
+        type(sp), pointer               :: pSp            ! pointer to the current stage
+        
+        type(status), pointer           :: pStatus(:, :)  ! Pointer to the final status of the current sp
+        type(status), pointer           :: pSspStatus     ! Pointer to the current status of the ssp
 
-        if (this%sfh(iAge, iMet)%tform > ageBins(iAge) .and. &
-            iAge < nAgeBins) then
-            !
-            ! Transfet is needed and possible
-            dt = this%sfh(iAge, iMet)%tform - ageBins(iAge)
-            ! Assume homogeneous distribution of the mass
-            ! TO DO, mass distribution scaling by "avgAge"
-            m = this%sfh(iAge, iMet)%mass
-            dm = dt / this%sfh(iAge, iMet)%tform * m
-            !
-            ! Mass is substract from the current bin
-            ! Average age of the current age bin is impacted
-            this%sfh(iAge, iMet)%avgAge = (this%sfh(iAge, iMet)%avgAge * m - &
-                                           dm * (ageBins(iAge) + dt/2.d0)) / (m - dm)
-            this%sfh(iAge, iMet)%mass = this%sfh(iAge, iMet)%mass - dm
-            !
-            ! And add to the next one
-            ! Average age of the next age bin is also impacted
-            m = this%sfh(iAge + 1, iMet)%mass
-            this%sfh(iAge + 1, iMet)%avgAge = (this%sfh(iAge + 1, iMet)%avgAge * m + &
-                                               dm * (ageBins(iAge) + dt/2.d0)) / (m + dm)
-            this%sfh(iAge + 1, iMet)%mass = this%sfh(iAge + 1, iMet)%mass + dm
+        class(sp)                       :: this           ! The current stellar population
+
+        ! Init sOutRate, sInRate and outRate
+        call sspInRate%create()
+        call sspOutRate%create()
+        call spOutRate%create()
+        if (.not. outRate%isCreated()) then
+            call outRate%create()
         end if
-    end subroutine sp_transfer
+
+        ! Init total mass
+        mass = real(0.d0, kind=rkd)
+        do jMet = 1, nMetBins
+            !
+            do iAge = 1, nAgeBins
+                !
+                ! Input rate (SFR) is only applied to the youngest ssp
+                !
+                if (iAge == 1) then
+                    ! Distribute gas input stellar metalicity bins
+                    inRateBins = g2s(inRate)
+                    sspInRate = sspInRate + inRateBins(jMet)
+                end if
+                !
+                
+                ! Get pointers
+                if (st == 1) then
+                    ! Reset "final" status to null
+                    call pStatus(iAge, jMet)%reset()
+                end if
+                pSspStatus => pStatus(iAge, jMet)
+                pSsp => pSp%sfh(iAge, jMet)
+                !
+                if (pSsp%mass > 0.d0 .or. sspInRate%mass > 0.d0) then
+                    !
+                    ! Apply the new solver step
+                    ! In output of stevolve, sspInRate contains the transfer rate
+                    ! from the current age bin to the next one
+                    call this%sfh(iAge, jMet)%stevolve(dt, st, sspInRate, sspOutRate, pSspStatus, pSsp)
+                    !
+                    ! Update global wind/sn ejection rate
+                    spOutRate = spOutRate + pSspStatus%out
+                    !
+                    ! Update total stellar mass
+                    mass = mass + pSp%sfh(iAge, jMet)%mass
+                    !
+                    ! Update mass weighted age
+                    mAge = mAge + pSp%sfh(iAge, jMet)%mass * pSp%sfh(iAge, jMet)%avgAge
+                    !
+                    ! Update average metalicity
+                    mZ = mZ + pSp%sfh(iAge, jMet)%mass * metBins(jMet)
+                end if
+            end do ! Met loop
+        end do ! Age loop
+        !
+        ! Set total mass
+        pSp%mass = mass
+        !
+        ! Set mass weighted age
+        pSp%mAge = mAge / mass
+        !
+        ! Set average metalicity
+        pSp%mZ = mZ / mass
+        !
+        ! Set current output rate and delete local output rate object
+        outRate = spOutRate
+        call spOutRate%delete()
+        !
+        ! Delete all other gas object created here
+        call sspInRate%delete()
+        call sspOutRate%delete()
+
+    end subroutine sp_stevolve
 
     ! **********************************
-    subroutine sp_solve(this, dt, inRate)
+    subroutine sp_evolve(this, dt, inRate, outRate)
 
-        ! Solve the evolution of the current stellar population
-        !  according to a constant external input rate "inRate"
+        ! Evolve, during dt, the current complete stellar population
+        ! according to :
+        ! - Internal evolution processes
+        ! - A constant input rate (due to external process) "inRate"
+        !
+        ! No ejection from any external processes can be applied to sp
+        ! Output rate is an output parameter storing wind/sn ejection from the current sp
 
         implicit none
 
-        integer(kind=ikd)          :: i, j
+        integer(kind=ikd)           :: st             ! Step index of evolution scheme
 
-        real(kind=rkd), intent(in) :: dt            ! The gsh is evolved during dt
+        real(kind=rkd), intent(in)  :: dt             ! The scale is evolve during dt
 
-        type(gas), intent(in)    :: inRate          ! The (dt-)constant input rate
-        type(gas), allocatable   :: outRates(:, :)  ! The corrected set of output rates
-        type(gas), allocatable   :: outRates1(:, :) ! Intermediates set of output rates
-        type(gas), allocatable   :: outRates2(:, :)
-        type(gas), allocatable   :: outRates3(:, :)
-        type(gas), allocatable   :: outRates4(:, :)
+        type(gas), intent(in)       :: inRate         ! The (dt-)constant input rate
+        type(gas), intent(out)      :: outRate        ! Pointer to the wind/sn output rate
 
-        type(sp)                 :: sp_tmp   ! Intermediate states of the stellar population
+        type(sp), target            :: aSp            ! A sp matching the current state
+        type(sp), pointer           :: pSp            ! Pointer to the current state
+        
+        type(status), pointer       :: pStatus(:, :)  ! Pointer to the final status of the current sp
 
-        class(sp)                :: this     ! The current stellar population
+        class(sp)                   :: this           ! The current stellar population
 
-        ! Init OutRates
-        allocate(outRates(nAgeBins, nMetBins))
-        !
-        ! Get curent status
-        outRates1 = this%status()
-        ! Performed evolution for dt/2
-        sp_tmp = this%evolve(dt/2.d0, inRate, outRates1)
-        !
-        select case (trim(intScheme))
-            !
-            case ('RK4')
-                ! Range-Kutta 4th order
-                ! Get curent status
-                outRates2 = sp_tmp%status()
-                ! Get second intermediate state
-                sp_tmp = this%evolve(dt/2.d0, inRate, outRates2)
-                outRates3 = sp_tmp%status()
-                ! Get last intermediate state
-                sp_tmp = this%evolve(dt, inRate, outRates3)
-                outRates4 = sp_tmp%status()
-                ! Perform complete (corrected) evolution
-                do i = 1, nAgeBins
-                    do j = 1, nMetBins
-                        outRates(i, j) = real(1.d0/6.d0,kind=rkd)*(outRates1(i, j) + &
-                                            real(2.d0, kind=rkd)*outRates2(i, j) + &
-                                            real(2.d0, kind=rkd)*outRates3(i, j) + &
-                                            outRates4(i, j))
-                    end do
-                end do
-                ! Final evolution with corrected output rates
-                this = this%evolve(dt, inRate, outRates)
-            case default
-                ! Range-Kutta 2d order
-                ! Get intermedite status
-                outRates = sp_tmp%status()
-                ! Perform complete evolution
-                this = this%evolve(dt, inRate, outRates)
-        end select
-        !
-        ! Delete temporary gas object
-        do i = 1, nAgeBins
-            do j = 1, nMetBins
-                call outRates(i, j)%delete()
-                call outRates1(i, j)%delete()
-                if (allocated(outRates2)) call outRates2(i, j)%delete()
-                if (allocated(outRates3)) call outRates3(i, j)%delete()
-                if (allocated(outRates4)) call outRates4(i, j)%delete()
-            end do
+        ! Init intermediate status with the current status
+        aSp = this
+        pSp => aSp
+        ! Define complete corrected status
+        pStatus => spStatus
+        do st = 1, nSolverStep
+            call this%stevolve(dt, st, inRate, outRate, pStatus, pSp)
         end do
-        ! Deallocate arrays
-        deallocate(outRates, outRates1)
-        if (allocated(outRates2)) deallocate(outRates2)
-        if (allocated(outRates3)) deallocate(outRates3)
-        if (allocated(outRates4)) deallocate(outRates4)
+        ! Save complete evolved state
+        this = aSp
 
-    end subroutine sp_solve
+    end subroutine sp_evolve
 
     !
     ! FUNCTIONS
@@ -538,33 +365,7 @@ contains
     end function sp_isCreated
 
     ! **********************************
-    function sp_status(this) result(rates)
-
-        ! Return the set of output rates
-        !  e.i one per age and metalicity bin
-
-        implicit none
-
-        integer(kind=ikd)       :: i, j
-
-        real(kind=rkd)          :: mbin
-
-        type(gas), allocatable  :: rates(:, :) ! The set of output rates
-        
-        class(sp)               :: this
-        !
-        ! Create and set values of output rates
-        allocate(rates(nAgeBins, nMetBins))
-        do i = 1, nAgeBins
-            do j = 1, nMetBins
-                mbin = this%sfh(i, j)%mass
-                rates(i ,j) = mbin * massLossRates(i, j)
-            end do
-        end do
-    end function sp_status
-
-    ! **********************************
-    function g2s(g) result(B)
+    function g2s(g) result(gasBins)
 
         ! Convert gas to stellar population
 
@@ -582,12 +383,12 @@ contains
         real(kind=rkd), allocatable    :: A(:, :)   ! Conversion matrix
 
         type(gas), intent(in)          :: g         ! Gas to convert in sp
+        type(gas), allocatable         :: gasBins(:)
 
-        ! Allocate
-        allocate(A(nMetBins, nMetBins))
+        ! Allocate B and gasBins
         allocate(B(nMetBins))
-        allocate(pvt(nMetBins))
-
+        allocate(gasBins(nMetBins))
+        !
         ! Set masses
         do i = 1, nMetBins
             if (i == 1) then
@@ -596,6 +397,19 @@ contains
                 B(i) = g%elts(i-1)
             end if
         end do
+        !
+        ! Test null values
+        if (sum(B) <= num_accuracy) then
+            do i = 1, nMetBins
+                gasBins(i) = real(0.d0, kind=rkd) * initAbund(i)
+            end do
+            deallocate(B)
+            return
+        end if
+        !
+        ! Allocate other structures
+        allocate(A(nMetBins, nMetBins))
+        allocate(pvt(nMetBins))
         !
         ! Solve the system
         ! The matrix is used and modified in "dgesv", a copy is needed
@@ -611,116 +425,17 @@ contains
         ! Normalisation
         mass = sum(B)
         B = g%mass/mass * B
+        !
+        ! Convert in gas object
+        do i = 1, nMetBins
+            gasBins(i) = B(i) * initAbund(i)
+        end do
 
         ! Deallocate
         deallocate(A)
+        deallocate(B)
         deallocate(pvt)
 
     end function g2s
-
-    ! **********************************
-    function ssp_evolve(this, dt, inRate, outRate) result(essp)
-
-        ! Evolve a single stellar population by dt
-        ! according to an input rate (SFR) "inRate"
-        ! and an output rate (wind and sn ejecta) "outRate"
-
-        implicit none
-
-        real(kind=rkd), intent(in) :: dt
-
-        type(gas), intent(in)      :: inRate  ! The input rate
-        type(gas), intent(in)      :: outRate ! The output rate
-        type(gas)                  :: newStar
-
-        type(ssp)                 :: essp    ! The evolved ssp
-
-        class(ssp)                 :: this    ! The current ssp
-
-        ! Init the evolved ssp with the current one
-        essp = this
-
-        ! Substract ejected gas
-        essp%mass = essp%mass - outRate%mass * dt
-        ! Ejected mass do not impact the average age
-
-        ! Add new formed stars
-        newStar = inRate * dt
-        if (newStar%mass > 0.d0) then
-            ! New stars are formed continuously during dt
-            ! The average age is therfore impacted
-            essp%avgAge = (essp%avgAge * essp%mass + dt/2.d0 * newStar%mass) /&
-                          (essp%mass + newStar%mass)
-            ! Update mass
-            essp%mass = essp%mass + newStar%mass
-        end if
-
-        ! Check mass in bin and reset if the stored mass is too low
-        if ((essp%mass > 0.d0) .and. &
-            (essp%mass < num_accuracy)) call this%create()
-
-        ! Update formation time of this single stellar population
-        if (essp%mass > 0.d0) essp%tform = essp%tform + dt
-
-    end function ssp_evolve
-
-    ! **********************************
-    function sp_evolve(this, dt, inRate, outRates) result(esp)
-
-        ! Evolve a stellar population by dt
-        ! according to an input rate (SFR) "inRate"
-        ! and a set of output rates (wind and sn ejecta) "outRates"
-
-        implicit none
-    
-        integer(kind=ikd)                   :: i, j
-
-        real(kind=rkd), intent(in)          :: dt             ! The time-step
-        real(kind=rkd)                      :: mass           ! The updated total mass of the sp
-        real(kind=rkd), dimension(nMetBins) :: inRateBins     ! Bin distribution of the gas turned into new stars
-
-        type(gas), intent(in)               :: inRate         ! The input rate
-        type(gas)                           :: sInRate
-        type(gas), intent(in), allocatable  :: outRates(:, :) ! The set of output rates
-
-        type(sp)                            :: esp            ! The evolved sp
-
-        class(sp)                           :: this           ! The current sp
-
-        ! Init gs structure from current
-        esp = this
-        !
-        ! Distribute gas input stellar metalicity bins
-        inRateBins = g2s(inRate * dt)
-        !
-        ! Loop over age and metalicity bins
-        mass = 0. ! Init the total mass
-        do i = 1, nAgeBins
-            do j = 1, nMetBins
-                ! Init the ssp input rate, null by default
-                call sInRate%create()
-                if (i == 1) then
-                    ! First age bin,
-                    ! Add input rate according to metalicity bin distribution
-                    sInRate = inRateBins(j) * inRate
-                end if
-                this%sfh(i, j) = this%sfh(i, j)%evolve(dt, sInRate, outRates(i, j))
-                call sInRate%delete()
-                !
-                ! Try mass transfer over age bins
-                call this%transfer(i, j)
-                ! 
-                ! Update total mass
-                mass = mass + this%sfh(i, j)%mass
-            end do
-        end do
-        !
-        ! Set new total gas mass
-        this%mass = mass
-        !
-        ! sInRate is delete
-        call sInRate%delete()
-
-    end function sp_evolve
 
 end module sp_mod
