@@ -1,0 +1,9 @@
+# Gil Pons: Evolution and CNO yields of Z = 0.00001 stars (Table 4 instant mass loss)
+# AGB phase yields for stars with stellar mass in the range [4, 5, 6, 6, 8, 9] Msun
+# M0, Menv (=Mini - Mrem), Ej_H1, Ej_He4, Ej_C12, Ej_N14, Ej_O16
+4.0   3.08 	  1.68	   1.27	   4.37E-03 	1.25E-01	1.13E-03
+5.0   3.93	  2.02	   1.75	   5.60E-03	    1.50E-01 	1.30E-03
+6.0   4.96	  2.61	   2.20	   4.82E-03	    1.41E-01	1.04E-03
+7.0   5.85	  3.38	   2.48	   3.21E-03	    8.66E-02	7.41E-04
+8.0   6.74	  4.12	   2.62	   1.39E-03	    3.00E-02	2.22E-04
+9.0   7.65	  5.21	   2.43	   1.19E-03	    1.69E-02	1.37E-03

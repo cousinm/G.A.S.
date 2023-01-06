@@ -1,0 +1,42 @@
+#  
+#   VizieR Astronomical Server vizier.u-strasbg.fr
+#    Date: 2014-11-14T09:02:13 [V1.99+ (14-Oct-2013)]
+#   In case of problem, please report to: cds-question@unistra.fr
+# 
+#   
+#Coosys J2000: eq_FK5 J2000 
+#INFO votable-version=1.99+ (14-Oct-2013) 
+#INFO -ref=VIZ5465c4dd2b58 
+#INFO -out.max=unlimited 
+#INFO queryParameters=11 
+#-oc.form=sexa
+#-out.max=unlimited
+#-nav=cat:J/A+A/490/769&tab:{J/A+A/490/769/table6}&key:source=J/A+A/490/769/table6&HTTPPRM:&
+#-source=J/A+A/490/769/table6
+#-order=I
+#-out=[Fe/H]
+#[Fe/H]=0
+#-out=Rem0.85
+#-out=Rem1.00
+#-out=Rem2.00
+#-out=Rem3.00
+#
+
+#RESOURCE=yCat_34900769
+#Name: J/A+A/490/769
+#Title: Yields from extremely metal-poor stars (Campbell+, 2008)
+#Table J_A_A_490_769_table6:
+#Name: J/A+A/490/769/table6
+#Title: Remnant core masses for all models
+#---Details of Columns:
+#    [Fe/H] ([Sun])    (F5.2)  Metallicity (Units: [Fe/H] except for Z=0) \linkRole{yields of the species for this abundance } [ucd=meta.unit;phys.abund.Z]
+#    Rem0.85 (solMass) (F6.3)  Remnant mass of 0.85M_{sun}_ model at this Z [ucd=phys.mass]
+#    Rem1.00 (solMass) (F6.3)  Remnant mass of 1.00M_{sun}_ model at this Z [ucd=phys.mass]
+#    Rem2.00 (solMass) (F6.3)  Remnant mass of 2.00M_{sun}_ model at this Z [ucd=phys.mass]
+#    Rem3.00 (solMass) (F6.3)  ? Remnant mass of 3.00M_{sun}_ model at this Z [ucd=phys.mass]
+#----- ------ ------ ------ ------
+#[Fe/  Rem0.  Rem1.  Rem2.  Rem3. 
+#H] ([ 85 (so 00 (so 00 (so 00 (so
+#Sun]) lMass) lMass) lMass) lMass)
+#----- ------ ------ ------ ------
+ 0.00  0.776  0.843  1.080  1.101

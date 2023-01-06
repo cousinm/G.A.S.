@@ -1,0 +1,84 @@
+#  
+#   VizieR Astronomical Server vizier.u-strasbg.fr
+#    Date: 2014-11-14T08:58:55 [V1.99+ (14-Oct-2013)]
+#   In case of problem, please report to: cds-question@unistra.fr
+# 
+#   
+#Coosys J2000: eq_FK5 J2000 
+#INFO votable-version=1.99+ (14-Oct-2013) 
+#INFO -ref=VIZ5465c42f028a 
+#INFO -out.max=unlimited 
+#INFO queryParameters=14 
+#-oc.form=sexa
+#-out.max=unlimited
+#-nav=cat:J/A+A/490/769&tab:{J/A+A/490/769/yields}&key:source=J/A+A/490/769/yields&HTTPPRM:&
+#-source=J/A+A/490/769/yields
+#-order=I
+#-out=[Fe/H]
+#[Fe/H]=0
+#-out=Elem
+#-out=A
+#-out=Init
+#-out=M0.85
+#-out=M1.00
+#-out=M2.00
+#-out=M3.00
+#
+#RESOURCE=yCat_34900769
+#Name: J/A+A/490/769
+#Title: Yields from extremely metal-poor stars (Campbell+, 2008)
+#Table J_A_A_490_769_yields:
+#Name: J/A+A/490/769/yields
+#Title: Yields of the various species for extremely metal-poor stars {\em(tables 1 to 5 of paper)}
+#---Details of Columns:
+#    [Fe/H] ([Sun]) (F5.2)  Metallicity of the star, except {\bf 0} which means {\bf Z=0} (no metal) [ucd=phys.abund.Fe]
+#    Elem           (A4)    Chemical species names [ucd=phys.atmol.element]
+#    A              (I2)    Nucleon number A [ucd=meta.id;meta.main]
+#    Init           (E9.3)  Initial abundance for this chemical species [ucd=phys.abund.Z]
+#    M0.85          (E9.3)  Yield from 0.85M_{sun}_ model for this species (1) [ucd=phys.composition.yield]
+#    M1.00          (E9.3)  Yield from 1.00M_{sun}_ model for this species (1) [ucd=phys.composition.yield]
+#    M2.00          (E9.3)  Yield from 2.00M_{sun}_ model for this species (1) [ucd=phys.composition.yield]
+#    M3.00          (E9.3)  ? Yield from 3.00M_{sun}_ model for this species (1) Not calculated in table4 [ucd=phys.composition.yield]
+#----- ---- -- --------- --------- --------- --------- ---------
+#[Fe/                                                           
+#H] ([                                                          
+#Sun]) Elem A  Init      M0.85     M1.00     M2.00     M3.00    
+#----- ---- -- --------- --------- --------- --------- ---------
+ 0.00 H1    1 7.548e-01 7.014e-01 6.597e-01 6.596e-01 5.807e-01
+ 0.00 H2    2 1.960e-04 1.575e-04 9.169e-05 2.023e-08 3.342e-18
+ 0.00 He3   3 7.851e-06 4.044e-05 1.604e-04 2.953e-07 1.158e-08
+ 0.00 He4   4 2.450e-01 2.976e-01 3.295e-01 3.367e-01 4.066e-01
+ 0.00 Li7   7 3.130e-10 4.704e-10 1.263e-09 4.491e-10 4.887e-11
+ 0.00 C12  12 0.000e+00 2.598e-05 1.844e-03 1.309e-04 4.882e-04
+ 0.00 C13  13 0.000e+00 7.778e-06 3.619e-04 3.034e-05 1.152e-04
+ 0.00 N14  14 0.000e+00 2.437e-04 3.919e-03 3.432e-03 1.166e-02
+ 0.00 N15  15 0.000e+00 9.104e-09 1.144e-06 1.493e-07 7.411e-07
+ 0.00 O16  16 0.000e+00 5.034e-04 4.333e-03 4.885e-05 1.516e-04
+ 0.00 O17  17 0.000e+00 7.398e-06 4.546e-05 1.397e-07 6.130e-07
+ 0.00 O18  18 0.000e+00 3.252e-08 1.456e-05 7.031e-11 2.423e-10
+ 0.00 F19  19 0.000e+00 1.848e-09 6.225e-06 2.879e-10 1.188e-09
+ 0.00 Ne20 20 0.000e+00 2.485e-07 1.726e-06 2.737e-05 1.386e-04
+ 0.00 Ne21 21 0.000e+00 6.766e-12 4.637e-08 1.806e-09 3.729e-09
+ 0.00 Ne22 22 0.000e+00 8.334e-10 4.239e-05 4.742e-07 5.315e-06
+ 0.00 Na23 23 0.000e+00 1.291e-09 1.131e-05 1.294e-05 9.539e-05
+ 0.00 Mg24 24 0.000e+00 3.838e-11 1.362e-06 1.865e-07 2.630e-07
+ 0.00 Mg25 25 0.000e+00 1.459e-08 3.166e-07 1.756e-06 1.562e-05
+ 0.00 Mg26 26 0.000e+00 2.475e-08 4.065e-08 8.159e-06 6.889e-05
+ 0.00 Al26 26 0.000e+00 3.182e-11 3.364e-10 3.085e-07 1.487e-06
+ 0.00 Al27 27 0.000e+00 4.387e-08 1.635e-10 1.337e-06 7.358e-06
+ 0.00 Si28 28 0.000e+00 1.002e-07 1.649e-11 6.170e-07 1.315e-06
+ 0.00 Si29 29 0.000e+00 1.158e-08 8.227e-13 1.269e-07 3.065e-07
+ 0.00 Si30 30 0.000e+00 2.768e-09 1.834e-13 3.338e-08 7.492e-08
+ 0.00 P31  31 0.000e+00 2.200e-08 2.071e-12 5.219e-07 1.117e-06
+ 0.00 S32  32 0.000e+00 4.381e-09 1.224e-12 1.870e-07 2.665e-07
+ 0.00 S33  33 0.000e+00 6.242e-10 3.359e-14 9.232e-09 1.542e-08
+ 0.00 S34  34 0.000e+00 2.195e-10 1.317e-13 5.557e-09 1.423e-08
+ 0.00 Fe56 56 0.000e+00 0.000e+00 0.000e+00 0.000e+00 0.000e+00
+ 0.00 Fe57 57 0.000e+00 0.000e+00 0.000e+00 0.000e+00 0.000e+00
+ 0.00 Fe58 58 0.000e+00 0.000e+00 0.000e+00 0.000e+00 0.000e+00
+ 0.00 Fe60 60 0.000e+00 0.000e+00 0.000e+00 0.000e+00 0.000e+00
+ 0.00 Co59 59 0.000e+00 0.000e+00 0.000e+00 0.000e+00 0.000e+00
+ 0.00 Ni58 58 0.000e+00 0.000e+00 0.000e+00 0.000e+00 0.000e+00
+ 0.00 Ni60 60 0.000e+00 0.000e+00 0.000e+00 0.000e+00 0.000e+00
+ 0.00 Ni61 61 0.000e+00 0.000e+00 0.000e+00 0.000e+00 0.000e+00
+ 0.00 Ni62 62 0.000e+00 0.000e+00 0.000e+00 0.000e+00 0.000e+00

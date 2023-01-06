@@ -1,0 +1,24 @@
+# Final mass of the star as function of the initial mass and of the metallicity
+# data extracted from Karakas+2010
+# selection is done with the following criteria
+# - no synthetic thermal pulses
+# - lambda_last = lambda_final
+# - VW93 mass loss 
+# - final mass for initial mass m = 2.000 and Z = 0.004, replaced by m = 2.100
+#
+# Mass, Z=0.0001, Z=0.004, Z=0.008, Z=0.02
+1.000   0.720	0.610	0.577	0.564	
+1.250	0.668	0.642	0.600	0.574
+1.500	0.661	0.628	0.633	0.600
+1.750	0.664	0.630	0.636	0.615
+1.900	0.681	0.640	0.640	0.630
+2.000	0.685	0.650	0.644	0.640
+2.250	0.713	0.664	0.652	0.660
+2.500	0.732	0.671	0.663	0.663
+3.000	0.813	0.731	0.694	0.682
+3.500	0.854	0.814	0.766	0.718
+4.000	0.874	0.852	0.836	0.792
+4.500	0.897	0.872	0.861	0.852
+5.000	0.929	0.905	0.886	0.879
+5.500	0.966	0.932	0.907	0.900
+6.000	1.008	0.977	0.948	0.929
