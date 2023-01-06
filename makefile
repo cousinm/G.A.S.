@@ -46,10 +46,10 @@ clean:
 
 utils:
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)parameters.f08
-	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)config.f08
-	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)model.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)PrDi.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)log.f08
+	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)config.f08
+	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)model.f08
 
 modules: 
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)gas.f08
