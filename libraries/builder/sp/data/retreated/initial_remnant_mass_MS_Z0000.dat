@@ -1,0 +1,11 @@
+# Initial and Remnant mass
+# Computed for a range of massive stars by Heger+10
+#  with initial stellar mass from 10 to 100 Msun
+# 1) Minit, 2) Mrem
+   1.20000000e+01   1.32499977e+00
+   1.50000000e+01   2.41400788e+00
+   2.00000000e+01   4.36799690e+00
+   3.00000000e+01   9.55502291e+00
+   4.00000000e+01   2.06400229e+01
+   6.00000000e+01   2.96150828e+01
+   1.00000000e+02   3.69519749e+01

@@ -1,0 +1,11 @@
+# Final stellar ejecta (AGB)
+# Computed for a range of low and intermediate stars by Campbell+2008
+#  with initial stellar mass 0.85, 1.00, 2.00 and 3.00 Msun
+# Are listed here only main ISM elements H1, He4, C12, N14, O16 and Fe56
+# Total-ejected mass is added
+# Z=0.000
+# 1) Mass, 2) Ej_H1, 3) Ej_He4, 4) Ej_C12, 5) Ej_N14, 6) Ej_O16, 7) Ej_Fe56, 8) Ej_tot
+   8.50000000e-01   5.19036000e-02   2.20224000e-02   1.92252000e-06   1.80338000e-05   3.72516000e-05   0.00000000e+00   7.39990170e-02
+   1.00000000e+00   1.03572900e-01   5.17315000e-02   2.89508000e-04   6.15283000e-04   6.80281000e-04   0.00000000e+00   1.57005428e-01
+   2.00000000e+00   6.06832000e-01   3.09764000e-01   1.20428000e-04   3.15744000e-03   4.49420000e-05   0.00000000e+00   9.19996991e-01
+   3.00000000e+00   1.10274930e+00   7.72133400e-01   9.27091800e-04   2.21423400e-02   2.87888400e-04   0.00000000e+00   1.89909951e+00

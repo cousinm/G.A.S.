@@ -1,0 +1,13 @@
+# Iwamoto SN-Ia Synthesized Mass (model W7)
+# This table is given for main ISM-elements H, He, C12, N14, O16 and Fe56
+# Metals and tot ejected mass are also given
+# Metals = Total because no H1 and no He4 are synthetized during SNIa event.
+# Elements  |  Synthesized mass (Msun)
+H 	        0.0
+He		    0.0
+C12+C13	    0.0483014	       
+N14+N15		1.16132E-06
+O16		    0.143 
+Fe56		0.74903      
+Metals      1.37083071167	   		    	     
+Total		1.37083071167
