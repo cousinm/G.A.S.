@@ -21,28 +21,35 @@ module gsh_mod
     public
 
     type gsh
-        real(kind=rkd)             :: mass          ! Total mass of the structure
-        real(kind=rkd)             :: l             ! Current largest scale (at least one Cloud)
-        type(gas)                  :: sfr           ! Instantaneous star formation rate (the tranfer rate of the lowest scale)
-        type(scale), allocatable   :: cascade(:)    ! Gas structuration cascade, set of scale
+        integer(kind=ikd)          :: il             ! Current largest scale (at least one Cloud)
+        real(kind=rkd)             :: mass           ! Total mass of the structure
+        type(gas)                  :: sfr            ! Instantaneous star formation rate (the tranfer rate of the lowest scale)
+        type(scale), allocatable   :: cascade(:)     ! Gas structuration cascade, set of scale
     contains
-        procedure  :: create => gsh_create        ! Create the gas structuration (cascade)
-        procedure  :: delete => gsh_delete        ! Delete the gas structuration (cascade)
-        procedure  :: copy => gsh_copy            ! Copy a gsh object
-        procedure  :: solve => gsh_solve          ! Solve, for dt, the next step of the integration scheme
-        procedure  :: stevolve => gsh_stevolve    ! Evolve, for dt, the next step of the integration scheme
-        procedure  :: evolve => gsh_evolve        !         according to internal/external input/output
-        procedure  :: Vesc => gsh_escape_velocity ! Return the escape velocity of the gs
+        procedure  :: create => gsh_create           ! Create the gas structuration (cascade)
+        procedure  :: delete => gsh_delete           ! Delete the gas structuration (cascade)
+        procedure  :: copy => gsh_copy               ! Copy a gsh object
+        procedure  :: ststatus => gsh_ststatus       !
+        procedure  :: stevolve => gsh_stevolve       ! Evolve, for dt, the next step of the integration scheme
+        procedure  :: dtoptim => gsh_dtoptim         ! Get the optimal time-step
+        procedure  :: evolve => gsh_evolve           !         according to internal/external input/output
+        procedure  :: Vesc => gsh_escape_velocity    ! Return the escape velocity of the gsh
+        procedure  :: iSFR => gsh_instantaneous_SFR  ! Return the instantaneous SFR
+                                                     ! i.e the SFR computed according to the current state
+                                                     ! the value is different of the RK solver value
+                                                     ! that use a combination of instantaneous SFR
+        procedure  :: disrupt => gsh_disrupt         ! Compute instantaneous gas disrupt rate
+                                                     ! according to the instantaneous injected power
     end type gsh
 
     ! TEMPORARY INTERMEDIATE STATUS
     ! Targets
-    type(status), allocatable, target     :: gshStatus(:)
+    type(status), allocatable, target     :: myGshStatus(:)
 
     ! INTERFACE OPERATOR DECLARATIONS
 
     interface assignment (=)  ! allows to copy a gsh component by using the symbol '='
-        module procedure gsh_copy_
+        module procedure gsh_copy
     end interface assignment (=)
 
 contains
@@ -58,10 +65,13 @@ contains
 
         implicit none
 
+        ! Init scale
         call scale_init()
 
         ! Init intermediate status
-        allocate(gshStatus(nScales))
+        if (.not. allocated(myGshStatus)) then
+            allocate(myGshStatus(nScales))
+        end if
 
     end subroutine gsh_init
 
@@ -75,6 +85,7 @@ contains
         integer(kind=ikd)  :: i
 
         real(kind=rkd)     :: l
+
         class(gsh)       :: this
 
         this%mass = 0.d0                ! Total mass of the structure
@@ -88,9 +99,8 @@ contains
             call this%cascade(i)%create(l)
         end do
 
-        ! Set the current largest scale
-        this%l = this%cascade(nScales)%l
-        i = gsh_l2i(this%l)
+        ! Init the injection scale index
+        this%il = 1
 
         return
     end subroutine gsh_create
@@ -103,10 +113,11 @@ contains
         implicit none
 
         integer(kind=ikd)  :: il
-        class(gsh)       :: this
 
+        class(gsh)         :: this
+
+        this%il   = 1          ! cell index of the largest scale (at least one cloud)
         this%mass = 0.d0       ! Total mass of the structure
-        this%l    = 0.d0       ! Highest occupied scale
 
         call this%sfr%delete() ! SFR
 
@@ -120,174 +131,188 @@ contains
     end subroutine gsh_delete
 
     ! **********************************
-    subroutine gsh_copy(gsh1, gsh2)
+    subroutine gsh_copy(this, aGsh)
 
-        ! Copy the gsh object gsh2 into the gsh object gsh1
+        ! Copy in "this" the gsh object aGsh
 
         implicit none
 
         integer(kind=ikd)           :: s
 
-        type(gsh), intent(in)       :: gsh2
+        type(gsh), intent(in)       :: aGsh
 
-        class(gsh), intent(inout)   :: gsh1
+        class(gsh), intent(inout)   :: this
 
         ! Copy
-        gsh1%mass = gsh2%mass
-        gsh1%l    = gsh2%l
-        gsh1%sfr  = gsh2%sfr
+        this%il   = aGsh%il
+        this%mass = aGsh%mass
+        this%sfr  = aGsh%sfr
         ! 
         ! Allocate cascade
-        if (.not. allocated(gsh1%cascade)) then
+        if (.not. allocated(this%cascade)) then
             ! Create the cascade with nScales cells
-            allocate(gsh1%cascade(nScales))
+            allocate(this%cascade(nScales))
         end if
         ! Copy each scale
         do s = 1, nScales
-            gsh1%cascade(s) = gsh2%cascade(s)
+            this%cascade(s) = aGsh%cascade(s)
+            call this%cascade(s)%setAsRef(aGsh%cascade(s))
         end do
     
     end subroutine gsh_copy
 
     ! **********************************
-    subroutine gsh_copy_(gsh1, gsh2)
-
-        ! Interface procedure to copy
-
-        implicit none
-
-        type(gsh), intent(in)      :: gsh2
-        class(gsh), intent(inout)  :: gsh1
-
-        call gsh_copy(gsh1, gsh2)
-
-    end subroutine gsh_copy_
-
-    ! **********************************
-    subroutine gsh_stevolve(this, dt, st, l, inRate, outRates, pStatus, pGsh)
-
-        ! Compute current status of the gas structuration
-        ! according to :
-        ! - Internal evolution processes
-        ! - A constant input rate (due to external process) "inRate" and
-        ! - A set of constant output rates (due to external process) "outRates"
-        ! Then
-        ! Apply the next step "st" of the complete integration scheme
-
-        implicit none
-    
-        integer(kind=ikd), intent(in)         :: st
-        integer(kind=ikd)                     :: il
-        integer(kind=ikd)                     :: s
-
-        real(kind=rkd), intent(in)            :: dt          ! The time-step
-        real(kind=rkd), intent(in)            :: l           ! The injection scale
-        real(kind=rkd)                        :: mass        ! mass contains in the complete cascade
-
-        type(gas), intent(in)                 :: inRate      ! The external input rate
-        type(gas), intent(inout), allocatable :: outRates(:) ! The set of output rates
-        type(gas)                             :: sclInRate
-
-        type(scale), pointer                  :: pScl        ! Pointer to the current scale
-        type(gsh), pointer                    :: pGsh        ! pointer to the current evolved state
-
-        type(status), pointer                 :: pStatus(:)  ! Pointer to the final status
-        type(status), pointer                 :: pSclStatus
-
-        class(gsh)                            :: this        ! The current gsh
-
-        ! Get the injection scale bin index
-        il = gsh_l2i(l)
-
-        ! Init sclInRate
-        call sclInRate%create()
-
-        ! Init total mass
-        mass = real(0.d0, kind=rkd)
-        !
-        ! Reset instantaneous SFR
-        call pGsh%sfr%create()
-
-        ! Run through the different scales,
-        ! from the largest one to the lowest one
-        do s = nScales, 1, -1 
-            ! Compute current global status due to
-            ! Internal process + external input/output
-            ! The largest scale can only be fed by external input
-            ! Here sInRate is null for s = nScale
-            if (s == il) sclInRate = sclInRate + inRate
-            !
-            ! Get pointers
-            if (st == 1) then
-                ! Reset "final" status to null
-                call pStatus(s)%reset()
-            end if
-            pSclStatus => pStatus(s)
-            pScl => pGsh%cascade(s)
-            !
-            if (pScl%gas%mass > 0.d0 .or. sclInRate%mass > 0.d0) then
-                ! Apply the new solver step
-                ! In output of stevolve, sclInrate contains the transfer rate
-                ! from the current scale to the next lower one
-                call this%cascade(s)%stevolve(dt, st, sclInRate, outRates(s), pSclStatus, pScl)
-                !
-                ! Update total cascade mass
-                mass = mass + pGsh%cascade(s)%gas%mass
-            end if
-        end do
-        !
-        ! Set total mass
-        pGsh%mass = mass
-        !
-        ! Set instantaneous star formation rate
-        ! Use the transfer rate of the lowest scale
-        if (pStatus(1)%tr%isCreated()) then
-            pGsh%sfr = pStatus(1)%tr
-        end if
-        !
-        ! Deallocate local structure
-        call sclInRate%delete()
-
-    end subroutine gsh_stevolve
-
-    ! **********************************
-    subroutine gsh_evolve(this, dt, l, inRate, outRates)
+    subroutine gsh_evolve(this, dt, l, Q, inRate, outRate)
 
         ! Evolve, during dt, the current gas structuration
         ! according to :
         ! - Internal evolution processes
-        ! - A constant input rate (due to external process) "inRate" and
-        ! - A set of constant output rates (due to external process) "outRates"
+        ! - A gas input rate (due to external fresh accretion): "inRate" and
+        ! - A power input (due to disruptive external processes): Q
+        ! - fresh gas accreation is injected at scale "l"
+        !
+        ! In output
+        ! - "outRate" is the global output rate produced by disruption processes on the cascade
 
         implicit none
 
         integer(kind=ikd)                     :: st          ! Step index of evolution scheme
+        integer(kind=ikd)                     :: s
 
-        real(kind=rkd), intent(in)            :: dt          ! The scale is evolve during dt
+        real(kind=rkd), intent(inout)         :: dt          ! The scale is evolve during dt
         real(kind=rkd), intent(in)            :: l           ! The injection scale
+        real(kind=rkd), intent(in)            :: Q           ! Instantaneous gas injected power
 
         type(gas), intent(in)                 :: inRate      ! The (dt-)constant input rate
-        type(gas), intent(inout), allocatable :: outRates(:) ! The set of output rates
+        type(gas), intent(out)                :: outRate     ! The gas ejected rate
 
-        type(gsh), target                     :: aGsh        ! The current intermediate evolved gas structuration
-        type(gsh), pointer                    :: pGsh        ! Pointer to the current evolved gas structuration
+        type(gsh), target                     :: aGsh        ! The current state
+        type(gsh), pointer                    :: pGsh        ! Pointer to the current state
 
         type(status), pointer                 :: pStatus(:)  ! Pointer to the final status
+        type(status), allocatable, target     :: aStatus(:)  ! Current status of the gsh
 
         class(gsh)                            :: this        ! The current gas structuration
 
-        ! Init intermediate status with the current status
+        ! Init the first intermediate status to the current status
         aGsh = this
         pGsh => aGsh
-        ! Define complete corrected status
-        pStatus => gshStatus
+        ! Loop over integration steps
         do st = 1, nSolverStep
-            call this%stevolve(dt, st, l, inRate, outRates, pStatus, pGsh)
+            !
+            ! Get the current status of the scale and update "final" status
+            pStatus => myGshStatus
+            aStatus = pGsh%ststatus(st, l, Q, inRate, pStatus)
+            !
+            if (.not. solver_isFinalStep(st)) then
+                ! Compute intermediate state according to current status
+                pStatus => aStatus
+            end if
+            !
+            ! Adaptative time-step
+            dt = this%dtoptim(dt, pStatus)
+            !
+            ! Get new state
+            call this%stevolve(st, dt, pStatus, outRate, pGsh)
         end do
         ! Save complete evolved state
         this = aGsh
+        ! Delete the tmp gsh structure
+        call aGsh%delete()
+        do s = 1, nScales
+            call aStatus(s)%delete()
+        end do
+        deallocate(aStatus)
 
     end subroutine gsh_evolve
+
+    ! **********************************
+    subroutine gsh_stevolve(this, st, dt, pStatus, outRate, pGsh)
+
+        ! Apply the next step "st" of the complete integration scheme
+        ! according to aStatus
+        !
+        ! In output
+        ! - "outRate" is the global output rate produced by disruption processes on the cascade
+
+        implicit none
+    
+        integer(kind=ikd), intent(in)   :: st
+        integer(kind=ikd)               :: il
+        integer(kind=ikd)               :: s
+
+        real(kind=rkd), intent(in)      :: dt              ! The time-step
+        real(kind=rkd)                  :: mass            ! mass contains in the complete cascade
+
+        type(gas), intent(out)          :: outRate         ! Large scale ejection rate
+
+        type(scale), pointer            :: pScl            ! Pointer to the current scale
+
+        type(status), pointer           :: pStatus(:)      ! Pointer to the current status
+        type(status), pointer           :: pSclStatus
+
+        type(gsh), pointer              :: pGsh            ! Pointer to the intermediate state
+
+        class(gsh)                      :: this            ! The current gsh
+
+        ! Init
+        ! Index of the one-cloud scale (or largest scale with mass)
+        il = -1
+        ! Create large scale outRate
+        call outRate%create()
+        ! Total mass
+        mass = real(0.d0, kind=rkd)
+        ! Init the new state to the current one
+        pGsh = this
+        ! and reste average SFR
+        call pGsh%sfr%create()
+        !
+        ! Compute new state
+        do s = nScales, 1, -1
+            !
+            ! Get pointers
+            pSclStatus => pStatus(s)
+            pScl => pGsh%cascade(s)
+            !
+            if (pScl%gas%mass > 0.d0 .or. pSclStatus%in%mass > 0.d0) then
+                !
+                ! Apply the new solver step for the scale
+                call this%cascade(s)%stevolve(st, dt, pSclStatus, pScl)
+                !
+                ! Update large scale ejecta rate
+                if (s >= pGsh%il .and. pSclStatus%out%isCreated()) then
+                    outRate = outRate + pSclStatus%out
+                end if
+                !
+                ! Update total cascade mass
+                mass = mass + pScl%gas%mass
+                !
+                ! Update the one-cloud scale index
+                if (il == -1) then
+                    il = s  ! Init to the first scale containing mass
+                end if
+                if (s < nScales) then
+                    if (pScl%nClouds() > 0 .and. this%cascade(s + 1)%nClouds() == 0) then
+                        ! Set to the first scale withat least one Cloud
+                        il = s
+                    end if
+                end if
+            end if
+        end do
+        !
+        ! Set new il
+        pGsh%il = il
+        !
+        ! Set total mass
+        pGsh%mass = mass
+        !
+        ! Set the average star formation rate apply during the last dt
+        ! Use the final transfer status
+        if (pStatus(1)%tr%isCreated()) then
+            pGsh%sfr = pStatus(1)%tr
+        end if
+
+    end subroutine gsh_stevolve
 
     !
     ! FUNCTIONS
@@ -331,7 +356,7 @@ contains
 
     end function gsh_l2i
 
-    ! **********************************
+        ! **********************************
     function gsh_escape_velocity(this) result(Vesc)
 
         ! Return the escape velovity of the current gas structuration
@@ -340,51 +365,217 @@ contains
 
         implicit none
 
-        integer(kind=ikd)    :: il
-
+        real(kind=rkd)       :: l
         real(kind=rkd)       :: Vesc
         real(kind=rkd)       :: NClouds
         real(kind=rkd)       :: mass
 
         class(gsh)         :: this
 
-        il = gsh_l2i(this%l)  ! Get the index of the largest occupied scale
-        
         ! The mass is distributed in the NClouds formed 
         ! at the largest occupied scale
-        NClouds = this%cascade(il)%NClouds()
+        NClouds = this%cascade(this%il)%NClouds()
+        l = this%cascade(this%il)%l
         Vesc = 0.d0 ! Init
         if (NClouds > 0.d0) then
             mass = this%mass / NClouds
             !
-            Vesc = sqrt(2.d0*GCst_CU*mass/this%l)  ! [CU]
+            Vesc = sqrt(2.d0*GCst_CU*mass/l)  ! [CU]
         end if
 
     end function gsh_escape_velocity
 
     ! **********************************
-    function gsh_solve(this, it, dt, aStatusTab, pStatus) result(aGsh)
+    function gsh_ststatus(this, st, l, Q, inRate, pStatus) result(aStatus)
 
-        ! Apply one solver step
+        ! Compute current status of the gas structuration history
+        ! according to :
+        ! - Internal evolution processes
+        ! - A gas input rate (due to external fresh accretion): "inRate" and
+        ! - A power input (due to disruptive external processes): Q
+        ! - fresh gas accreation is injected at scale "l"
 
         implicit none
 
-        integer(kind=ikd), intent(in)               :: it                 ! Current solver iteration
-        integer(kind=ikd)                           :: s
+        integer(kind=ikd), intent(in)   :: st
+        integer(kind=ikd)               :: il
+        integer(kind=ikd)               :: s
 
-        real(kind=rkd), intent(in)                  :: dt                 ! Full time step
+        real(kind=rkd), intent(in)      :: l               ! The injection scale
+        real(kind=rkd), intent(in)      :: Q               ! The gas injected powerde
 
-        type(gsh)                                   :: aGsh               ! The new intermediate scale evolution
-        type(status), intent(in), allocatable       :: aStatusTab(:)      ! Set of current global evolution rate
-        type(status), pointer                       :: pStatus(:)         ! Pointer to the current corrected scale status
+        type(gas), intent(in)           :: inRate          ! The external input rate
+        type(gas)                       :: sclInRate       ! Input rate
+        type(gas)                       :: sclOutRate      ! Output rate
+        type(gas), allocatable          :: disruptRates(:) ! Disruption rates
+                                                           ! Gas transfered from lower to larger scale
+        type(scale), pointer            :: pScl            ! Pointer to the current scale
 
-        class(gsh)                                  :: this               ! The current scale
+        type(status), pointer           :: pStatus(:)      ! Pointer to the "final" status
+        type(status), allocatable       :: aStatus(:)      ! Current status of the gsh
+        type(status), pointer           :: pSclStatus      ! Pointer to the current state of a scale
 
-        aGsh = this
-        do s = 1, nScales
-            aGsh%cascade(s) = this%cascade(s)%solve(it, dt, aStatusTab(s), pStatus(s))
+        class(gsh), target              :: this            ! The current gsh
+        !
+        ! Allocate aStatus,
+        ! this array SHOULD be deallocated at the end of the complete step evolution
+        allocate(aStatus(nScales))
+        !
+        ! Compute disruption rates according to power injection
+        disruptRates = this%disrupt(Q)
+        !
+        ! Get the scale index associated to fresh gas injection scale
+        il = gsh_l2i(l)
+        !
+        ! Init sclInRate
+        call sclInRate%create()
+        !
+        ! Get the current status of the gas structuration
+        ! Run through the different scales,
+        ! from the largest one to the lowest one
+        do s = nScales, 1, -1
+            !
+            ! Get pointers
+            pSclStatus => pStatus(s)
+            pScl => this%cascade(s)
+            !
+            ! Compute current global status due to
+            ! external input/output
+            ! The largest scale can only be fed by external input
+            !
+            ! At injection scale, add fresh input rate
+            if (s == il) then
+                sclInRate = sclInRate + inRate
+            end if
+            !
+            ! Take into account mass transfer due to disruption process
+            call sclOutRate%create()  ! Reset local output rate
+            ! In all cases, disrupt rate should be takes into account
+            if (disruptRates(s)%isCreated()) sclOutRate = sclOutRate + disruptRates(s)
+            ! But a disrupt rate is an injection rate at the upper scale only below the (one-cloud scale)
+            if (s > 1 .and. s <= this%il) then
+                ! Scale 's' receives disrution rate from scale s-1
+                if (disruptRates(s - 1)%isCreated()) sclInRate = sclInRate + disruptRates(s - 1)
+            end if
+            !
+            ! Update scale status, take into account internal transfer rate
+            ! Update the "final" status
+            aStatus(s) = pScl%ststatus(st, sclInRate, sclOutRate, pSclStatus)
+            !
+            ! The transfer rate of the scale "s" become an input rate the next scale
+            sclInRate = aStatus(s)%tr
+        end do
+        !
+        ! Deallocate local structure
+        deallocate(disruptRates)
+
+    end function gsh_ststatus
+
+    ! **********************************
+    function gsh_dtoptim(this, dt, pStatus) result(adt)
+
+        ! Return the optim time-step accoring to current status
+        ! and mass
+
+        implicit none
+
+        integer(kind=ikd)          :: s
+
+        real(kind=rkd), intent(in) :: dt         ! time-step
+        real(kind=rkd)             :: adt
+        real(kind=rkd)             :: mass
+
+        type(status), pointer      :: pStatus(:) ! Pointer to the current set of status
+        type(status), pointer      :: pSclStatus ! Pointer to a current scale status
+
+        type(scale), pointer       :: pScl       ! Pointer to a scale
+
+        class(gsh), target         :: this
+
+        ! Run through the different scales
+        ! and deduce optimal time step
+        ! from the largest one to the lowest one
+        ! Init adaptative time-step, to current time-step
+        adt = dt
+        do s = nScales, 1, -1 
+            !
+            ! Get pointers
+            pSclStatus => pStatus(s)
+            pScl => this%cascade(s)
+            mass = pScl%gas%mass
+            if (mass > 0.d0) then
+                adt = pSclStatus%dtMax(adt, pScl%gas%mass)
+            end if
         end do
 
-    end function gsh_solve
+    end function gsh_dtoptim
+
+    ! **********************************
+    function gsh_instantaneous_SFR(this) result (sfr)
+
+        ! Return the instantaneous SFR
+        ! i.e the SFR computed according to the current state
+        ! the value is different of the RK solver value
+        ! that use a combination of instantaneous SFR
+
+        implicit none
+
+        type(gas)          :: sfr
+
+        class(gsh)         :: this
+
+        ! The instantaneous star formation rate is given by
+        ! the "transfert" rate of the lowest scale of the gas structuration history
+        sfr = this%cascade(1)%transfer()
+
+    end function gsh_instantaneous_SFR
+
+    ! **********************************
+    function gsh_disrupt(this, Q) result(disruptRate)
+
+        implicit none
+
+        integer(kind=ikd)           :: s
+
+        real(kind=rkd), intent(in)  :: Q              ! Instantaneous injected power
+        real(kind=rkd)              :: Qm
+        real(kind=rkd)              :: Qs
+        real(kind=rkd)              :: mbin
+        real(kind=rkd)              :: sV             ! Velocity dispersion of the s + 1 scale
+        real(kind=rkd)              :: vRate
+
+        type(gas), allocatable      :: disruptRate(:) ! Set of gas disrupt rates
+
+        class(gsh)                  :: this           ! The current gas structuration
+
+        ! Create and init outputs
+        ! this array SHOULD be deallocate in stevolve procedure
+        allocate(disruptRate(nScales))
+
+        if (this%mass > 0.d0 .and. Q > 0.d0) then
+            ! Power is injected at all scales
+            Qm = Q / this%mass
+            do s = 1, nScales
+                ! Init
+                call disruptRate(s)%create()
+                mbin = this%cascade(s)%gas%mass
+                if (mbin > 0.d0) then
+                    Qs = Qm * mbin
+                    if (s < this%il) then  ! this%il <= nScale
+                        ! Lowest scales, lower than the 1-cloud scale: disruption with transfer to the higher scale
+                        ! this%il <= nScale
+                        sV = this%cascade(s + 1)%sV()
+                    else
+                       sV = Vwind
+                    end if
+                    !
+                    vRate = real(2.d0, kind=rkd) * Qs / sV**2.
+                    ! Gas conversion is performed with the signature
+                    disruptRate(s) = vRate * this%cascade(s)%gas%signature()
+                end if
+            end do
+        end if
+
+    end function gsh_disrupt
 
 end module gsh_mod

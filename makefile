@@ -46,6 +46,7 @@ clean:
 
 utils:
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)parameters.f08
+	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)solver.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)PrDi.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)log.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)config.f08
@@ -58,12 +59,15 @@ modules:
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)gsh.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)ssp.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)sp.f08
+	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)disc.f08
 
 test_modules:
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(TESTSDIR)gas_tests.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(TESTSDIR)scale_tests.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(TESTSDIR)gsh_tests.f08
+	$(FORT) $(FFLAGS) $(OPTIONS) -c $(TESTSDIR)ssp_tests.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(TESTSDIR)sp_tests.f08
+	$(FORT) $(FFLAGS) $(OPTIONS) -c $(TESTSDIR)disc_tests.f08
 
 lib:
 	mv *.o ${BINDIR}

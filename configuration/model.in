@@ -16,4 +16,7 @@ stepFactor      = 2.0       ! Stepping factor
 #
 # Stellar population
 IMF             = Chabrier+03  ! Initial Mass Function (Salpeter+55, Chabrier+03, Kroupa+93, Scalo+98)
+#
+# Feedback
+Vwind           = 200.0     ! [km/s]
 

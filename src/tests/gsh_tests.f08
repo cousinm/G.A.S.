@@ -31,11 +31,11 @@ contains
 
         integer(kind=ikd), parameter :: u = 333       ! file unit
 
-        logical                    :: isValid
+        logical                      :: isValid
 
-        real(kind=rkd)             :: tstart, tend
+        real(kind=rkd)               :: tstart, tend
 
-        character(MAXPATHSIZE)     :: filename
+        character(MAXPATHSIZE)       :: filename
 
         ! Open log file for these tests
         write(filename,'(a, a)') trim(validPath), '/gsh_tests.log'
@@ -159,6 +159,7 @@ contains
 
         integer(kind=ikd)              :: s
         integer(kind=ikd), parameter   :: u = 10000        ! file unit
+        integer(kind=ikd), parameter   :: v = 20000        ! file unit
 
         logical                      :: isValid
 
@@ -167,12 +168,15 @@ contains
         real(kind=rkd), parameter    :: l = real(1.d2, kind=rkd)*pc2kpc  ! [pc] Injection scale
         real(kind=rkd), parameter    :: dt = real(1.d-4, kind=rkd)       ! CU [Gyr]
         real(kind=rkd), parameter    :: evolTime = real(1.d0, kind=rkd)  ! CU [Gyr]
+        real(kind=rkd)               :: adt
         real(kind=rkd)               :: t
+        real(kind=rkd), parameter    :: Q = real(0.d0, kind=rkd)         ! Gas injection power (here = 0.)
         real(kind=rkd)               :: solution, diff
 
         type(gas)                    :: inRate       ! The constant injection rate at scale l
-        type(gas), allocatable       :: outRates(:)  ! Output rates (due to external process = 0 here)
+        type(gas)                    :: outRate      ! Output rate (gas ejected from the gsh, here = 0)
         type(gas)                    :: ejGas        ! Gas ejected from the gsh, dt * SFR
+        type(gas)                    :: iSFR
 
         type(gsh)                    :: aGsh         ! A gas structuration history
 
@@ -181,13 +185,7 @@ contains
         ! Create input rate
         inRate = real(1.d1, kind=rkd) * MassRate_CU * initAbund(nMetBins)  ! 10Msun/yr in CU
 
-        ! Create set of output rates (null)
-        allocate(outRates(nScales))
-        do s = 1, nScales
-            call outRates(s)%create()
-        end do
-
-        ! Create a scale
+        ! Create a gas structuration history
         call aGsh%create()
         ! Create gas reservoir
         call ejGas%create()
@@ -197,12 +195,16 @@ contains
         do s = 1, nScales
             write(filename, '(a,a,i2.2,a)') trim(validPath), '/gsh_test_constant_injection_s', s, '.dat'
             open(unit=u+s, file=filename, status='new')
-            write(u+s, '(a)') '# t | mass | ll | Vesc [km/s] | nClouds(s) | mass(s) | Ms '
+            write(u+s, '(a)') '# t | mass [CU] | il | Vesc [km/s] | nClouds(s) | mass(s) [CU] '
         end do
-        ! Create a other main test file for mass conservation test
+        ! Create an other main test file for mass conservation test
         write(filename, '(a,a)') trim(validPath), '/gsh_test_constant_injection.dat'
         open(unit=u, file=filename, status='new')
-        write(u, '(a)') '# t | gsh mass | ej gas mass [CU] | solution | diff'
+        write(u, '(a)') '# t | gsh mass [CU] | ej gas mass [CU] | solution | diff'
+        ! Create an other result file to trace average and instantaneous SFR according to injection rate
+        write(filename, '(a,a)') trim(validPath), '/gsh_result_constant_injection.dat'
+        open(unit=v, file=filename, status='new')
+        write(v, '(a)') '# t | gsh mass [CU] | inRate [CU] | Average SFR [CU] | instantaneous SFR [CU]'
 
         ! Evolution
         t = 0.d0         ! init
@@ -212,25 +214,28 @@ contains
             !
             ! Save each scale in a dedicated file
             do s = 1, nScales
-                write(u+s, *) t, aGsh%mass, aGsh%l, aGsh%Vesc()*Velocity_km_s, aGsh%cascade(s)%nClouds(), aGsh%cascade(s)%gas%mass, ejGas%mass
+                write(u+s, *) t, aGsh%mass, aGsh%il, aGsh%Vesc()*Velocity_km_s, aGsh%cascade(s)%nClouds(), aGsh%cascade(s)%gas%mass
             end do
             write(u, *) t, aGsh%mass, ejGas%mass, solution, diff
+            iSFR = aGsh%iSFR()
+            write(v, *) t, aGsh%mass, inRate%mass, aGsh%sfr%mass, iSFR%mass
             !
             ! Compute evolution
-            call aGsh%evolve(dt, l, inRate, outRates)
+            adt = dt
+            call aGsh%evolve(adt, l, Q, inRate, outRate)
             !
             ! Compute real solution
-            solution = solution + inRate%mass * dt
+            solution = solution + inRate%mass * adt
             !
             ! Update ejected gas reservoir
-            ejGas = ejGas + dt * aGsh%sfr
+            ejGas = ejGas + adt * aGsh%sfr
             !
             ! Test, mass conservation
             diff = abs(ejGas%mass + aGsh%mass - solution)
             if (diff > num_accuracy) then
                 isValid = .FALSE.
             end if
-            t = t + dt
+            t = t + adt
         end do
 
         ! Close data files
@@ -238,15 +243,13 @@ contains
             close(u+s)
         end do
         close(u)
+        close(v)
 
         ! Delete structures
         call aGsh%delete()
         call inRate%delete()
         call ejGas%delete()
-        do s = 1, nScales
-            call outRates(s)%delete()
-        end do
-        deallocate(outRates)
+        call outRate%delete()
 
     end function test_gsh_constant_injection
 
@@ -265,11 +268,13 @@ contains
         real(kind=rkd), parameter    :: l = real(1.d2, kind=rkd)*pc2kpc  ! [pc] Injection scale
         real(kind=rkd), parameter    :: dt = real(1.d-4, kind=rkd)       ! CU [Gyr]
         real(kind=rkd), parameter    :: evolTime = real(1.d0, kind=rkd)  ! CU [Gyr]
+        real(kind=rkd), parameter    :: Q = real(0.d0, kind=rkd)         ! Gas injection power (here = 0.)
         real(kind=rkd)               :: t
+        real(kind=rkd)               :: adt
         real(kind=rkd)               :: solution, diff
 
         type(gas)                    :: inRate  ! The constant injection rate at scale l
-        type(gas), allocatable       :: outRates(:) 
+        type(gas)                    :: outRate ! Output rate (gas ejected from the gsh, here = 0) 
         type(gas)                    :: ejGas   ! Gas ejected from the gsh
 
         type(gsh)                    :: aGsh    ! gas structuration history
@@ -278,12 +283,6 @@ contains
 
         ! Create input rate
         inRate = real(1.d1, kind=rkd) * MassRate_CU * initAbund(nMetBins)  ! 10Msun/yr in CU
-
-        ! Create set of output rates (null)
-        allocate(outRates(nScales))
-        do s = 1, nScales
-            call outRates(s)%create()
-        end do
 
         ! Create a gas structuration history
         call aGsh%create()
@@ -295,7 +294,7 @@ contains
         do s = 1, nScales
             write(filename, '(a,a,i2.2,a)') trim(validPath), '/gsh_test_constant_injection_and_stop_s', s, '.dat'
             open(unit=u+s, file=filename, status='new')
-            write(u+s, '(a)') '# t | mass | ll | Vesc [km/s] | nClouds(s) | mass(s) | Ms '
+            write(u+s, '(a)') '# t | mass | il | Vesc [km/s] | nClouds(s) | mass(s) | Ms '
         end do
         ! Create a other main test file for mass conservation test
         write(filename, '(a,a)') trim(validPath), '/gsh_test_constant_injection_and_stop.dat'
@@ -312,25 +311,26 @@ contains
             !
             ! Save each scale in a dedicated file
             do s = 1, nScales
-                write(u+s, *) t, aGsh%mass, aGsh%l, aGsh%Vesc()*Velocity_km_s, aGsh%cascade(s)%nClouds(), aGsh%cascade(s)%gas%mass, ejGas%mass
+                write(u+s, *) t, aGsh%mass, aGsh%il, aGsh%Vesc()*Velocity_km_s, aGsh%cascade(s)%nClouds(), aGsh%cascade(s)%gas%mass, ejGas%mass
             end do
             write(u, *) t, aGsh%mass, ejGas%mass, solution, diff
             !
             ! Compute evolution
-            call aGsh%evolve(dt, l, inRate, outRates)
+            adt = dt
+            call aGsh%evolve(adt, l, Q, inRate, outRate)
             !
             ! Compute real solution
-            solution = solution + inRate%mass * dt
+            solution = solution + inRate%mass * adt
             !
             ! Update ejected gas reservoir
-            ejGas = ejGas + dt * aGsh%sfr
+            ejGas = ejGas + adt * aGsh%sfr
             !
             ! Test, mass conservation
             diff = abs(ejGas%mass + aGsh%mass - solution)
             if (diff > num_accuracy) then
                 isValid = .FALSE.
             end if
-            t = t + dt
+            t = t + adt
         end do
 
         ! Close data files
@@ -343,10 +343,7 @@ contains
         call aGsh%delete()
         call inRate%delete()
         call ejGas%delete()
-        do s = 1, nScales
-            call outRates(s)%delete()
-        end do
-        deallocate(outRates)
+        call outRate%delete()
 
     end function test_gsh_constant_and_stop_injection
 

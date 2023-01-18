@@ -100,6 +100,7 @@ module disc_test_mod
 
         real(kind=rkd), parameter    :: l = real(1.d2, kind=rkd)*pc2kpc  ! [pc] Injection scale
         real(kind=rkd), parameter    :: dt = real(1.d-4, kind=rkd)       ! CU [Gyr]
+        real(kind=rkd)               :: adt
         real(kind=rkd), parameter    :: evolTime = real(1.d0, kind=rkd)  ! CU [Gyr]
         real(kind=rkd)               :: t
         real(kind=rkd)               :: solution, diff
@@ -113,7 +114,7 @@ module disc_test_mod
         isValid = .TRUE.
 
         ! Create input rate
-        inRate = real(1.d1, kind=rkd) * MassRate_CU * initAbund(nMetBins)  ! 10Msun/yr in CU
+        inRate = real(1.d1, kind=rkd) * MassRate_CU * initAbund(4)  ! 10Msun/yr in CU
 
         ! Create a disc
         call aDisc%create()
@@ -135,20 +136,21 @@ module disc_test_mod
             write(u, *) t, aDisc%myGsh%mass, aDisc%mySp%mass, ejGas%mass, solution, diff
             !
             ! Compute evolution
-            call aDisc%evolve(dt, l, inRate, outRate)
+            adt = dt
+            call aDisc%evolve(adt, l, inRate, outRate)
             !
             ! Compute real solution
-            solution = solution + inRate%mass * dt
+            solution = solution + inRate%mass * adt
             !
             ! Update ejected gas reservoir
-            ejGas = ejGas + dt * outRate
+            ejGas = ejGas + adt * outRate
             !
             ! Test, mass conservation
             diff = abs(aDisc%myGsh%mass + aDisc%mySp%mass + ejGas%mass - solution)
             if (diff > num_accuracy) then
                 isValid = .FALSE.
             end if
-            t = t + dt
+            t = t + adt
         end do
 
         ! Close data file

@@ -53,6 +53,7 @@ module parameters
     real(kind=rkd), parameter    :: Gyr2s             = 3.1556952d16        ! 1 Gyr in sec
     real(kind=rkd), parameter    :: s2Gyr             = 1.d0/Gyr2s          ! 1 sec in Gyr
     real(kind=rkd), parameter    :: Gyr2yr            = 1.d9                ! 1 Gyr in yr
+    real(kind=rkd), parameter    :: km_s2kpc_Gyr      = Gyr2s/kpc2km        ! 1km/s in kpc/Gyr
     real(kind=rkd), parameter    :: lightSpeed_CU     = lightSpeed_m_s*Gyr2s/kpc2m       ! Light Speed in code unit [kpc/Gyr] (~ 306601)
     real(kind=rkd), parameter    :: Energy_J          = Mass_kg*kpc2m**2./(Gyr2s**2.)    ! 1 CU energy (~ 1.90121 10^48 J)
     real(kind=rkd), parameter    :: Energy_CU         = 1.d0/Energy_J                    ! 1 Joule in CU [10^11.Msun.kpc^2/Gyr^2] (~ 5.25980 10^-48 )

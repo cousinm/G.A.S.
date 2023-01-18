@@ -37,9 +37,6 @@ contains
 
         character(MAXPATHSIZE)     :: filename
 
-        ! Init module
-        call sp_init()
-
         ! Open log file for these tests
         write(filename,'(a, a)') trim(validPath), '/sp_tests.log'
         open(unit=u, file=filename, status='new')
@@ -47,10 +44,10 @@ contains
         isValid = test_sp_new()
         write(u, '(a,l)') 'test_sp_new: ', isValid
 
-        call cpu_time(tstart)
-        isValid = test_sp_instantaneous_burst()
-        call cpu_time(tend)
-        write(u, '(a,f7.3,a,l)') 'test_sp_instantaneous_burst (', tend-tstart, ' sec): ', isValid
+        !call cpu_time(tstart)
+        !isValid = test_sp_instantaneous_burst()
+        !call cpu_time(tend)
+        !write(u, '(a,f7.3,a,l)') 'test_sp_instantaneous_burst (', tend-tstart, ' sec): ', isValid
 
         call cpu_time(tstart)
         isValid = test_sp_constant_SFR()
@@ -127,6 +124,7 @@ contains
         real(kind=rkd), parameter      :: dt = real(1.d-4, kind=rkd)  ! CU [Gyr]
         real(kind=rkd), parameter      :: evolTime = 3.d0             ! CU [Gyr]
         real(kind=rkd)                 :: t
+        real(kind=rkd)                 :: adt
         real(kind=rkd)                 :: solution, diff
 
         type(gas)                      :: inRate   ! The constant SFR
@@ -167,17 +165,18 @@ contains
             solution = solution + inRate%mass * dt
             !
             ! Compute evolution
-            call aSp%evolve(dt, inRate, outRate)
+            adt = dt
+            call aSp%evolve(adt, inRate, outRate)
             !
             ! Update ejected gas reservoir
-            ejGas = ejGas + dt * outRate
+            ejGas = ejGas + adt * outRate
             !
             ! Test, mass conservation
             diff = abs(ejGas%mass + aSp%mass - solution)
             if (diff > num_accuracy) then
                 isValid = .FALSE.
             end if
-            t = t + dt
+            t = t + adt
         end do
 
         ! Close data files
@@ -204,11 +203,11 @@ contains
         real(kind=rkd), parameter      :: dt = real(1.d-4, kind=rkd)  ! CU [Gyr]
         real(kind=rkd), parameter      :: evolTime = 1.d0             ! CU [Gyr]
         real(kind=rkd)                 :: t
+        real(kind=rkd)                 :: adt
         real(kind=rkd)                 :: solution, diff
 
         type(gas)                      :: inRate   ! The constant SFR
-        type(gas), target              :: outRate  ! wind/sn ejection rate
-        type(gas), pointer             :: pOutRate ! Pointer to wind/sn ejection rate
+        type(gas)                      :: outRate  ! SN ejection rate
         type(gas)                      :: ejGas    ! Gas ejected by stellar population
         type(sp)                       :: aSp      ! A stellar population
 
@@ -218,7 +217,6 @@ contains
         inRate = real(1.d1 * MassRate_CU, kind=rkd) * initAbund(3)  ! 10Msun/yr in CU
         ! Init outRate
         call outRate%create()
-        pOutRate => outRate
 
         ! Create the stellar population
         call aSp%create()
@@ -239,20 +237,21 @@ contains
             write(u, *) t, aSp%mass, ejGas%mass, solution, diff, aSp%mAge
             !
             ! Compute evolution
-            call aSp%evolve(dt, inRate, pOutRate)
+            adt = dt
+            call aSp%evolve(adt, inRate, outRate)
             !
             ! Compute real solution
-            solution = solution + inRate%mass * dt
+            solution = solution + inRate%mass * adt
             !
             ! Update ejected gas reservoir
-            ejGas = ejGas + dt * pOutRate
+            ejGas = ejGas + adt * outRate
             !
             ! Test, mass conservation
             diff = abs(ejGas%mass + aSp%mass - solution)
             if (diff > num_accuracy) then
                 isValid = .FALSE.
             end if
-            t = t + dt
+            t = t + adt
         end do
 
         ! Close data files

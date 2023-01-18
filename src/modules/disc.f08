@@ -125,7 +125,7 @@ contains
     end subroutine disc_copy_
 
     ! **********************************
-    subroutine disc_stevolve(this, dt, st, l, inRate, outRate, pDisc)
+    subroutine disc_stevolve(this, st, dt, l, inRate, outRate, pDisc)
 
         ! Compute current status of the disc
         ! according to :
@@ -138,33 +138,38 @@ contains
 
         implicit none
     
-        integer(kind=ikd), intent(in)   :: st
+        integer(kind=ikd), intent(in)     :: st
+        integer(kind=ikd)                 :: s, iAge, jMet
 
-        real(kind=rkd), intent(in)      :: dt               ! The time-step
-        real(kind=rkd), intent(in)      :: l                ! The gas injection scale
-        real(kind=rkd)                  :: Qsn              ! SN gas disruption power
+        real(kind=rkd), intent(inout)     :: dt               ! The time-step
+        real(kind=rkd)                    :: gshDt, adt       ! The optimal time-step
+        real(kind=rkd), intent(in)        :: l                ! The gas injection scale
+        real(kind=rkd)                    :: Qsn              ! SN gas disruption power
 
-        type(gas), intent(in)           :: inRate           ! The external input rate
-        type(gas), intent(out)          :: outRate          ! The output rate
-        type(gas)                       :: spOutRate        ! The stellar population outRate (ejecta)
-        type(gas)                       :: iSFR             ! The instantaneous SFR
-        type(gas)                       :: gshInRate        ! Total gsh input rate, fresh input + ejected gas from sp
-        type(gas)                       :: ejR
+        type(gas), intent(in)             :: inRate           ! The external input rate
+        type(gas), intent(out)            :: outRate          ! The large scale output rate
+        type(gas)                         :: spOutRate        ! The stellar population outRate (ejecta)
+        type(gas)                         :: spInRate         ! Input rate of the stellar populaiton (SFR)
+        type(gas)                         :: gshInRate        ! Total gsh input rate, fresh input + ejected gas from sp
+        type(gas)                         :: ejR
 
-        type(status), pointer           :: pGshStatus(:)    ! Pointer to the gsh status
-        type(status), pointer           :: pSpStatus(:, :)  ! Pointer to the sp status
+        type(status), allocatable, target :: aGshStatus(:)    ! Current status of the  gas structuration history
+        type(status), pointer             :: pGshStatus(:)    ! Pointer to the gsh status
+        type(status), allocatable, target :: aSpStatus(:, :)  ! Current status of the stelalr population
+        type(status), pointer             :: pSpStatus(:, :)  ! Pointer to the sp status
 
-        type(gsh), pointer              :: pGsh             ! pointer to the current gsh stage
-        type(sp), pointer               :: pSp              ! pointer to the current stage of the sp
 
-        type(disc), pointer             :: pDisc            ! Pointer to the current stage
+        type(gsh), pointer                :: pGsh             ! pointer to the current gsh stage
+        type(sp), pointer                 :: pSp              ! pointer to the current stage of the sp
 
-        class(disc)                     :: this             ! The current gsh
+        type(disc), pointer               :: pDisc            ! Pointer to the current stage
+
+        class(disc)                       :: this             ! The current gsh
 
         ! Get current status for the gas structuration history
         ! and the stellar population
-        pGshStatus => gshStatus
-        pSpStatus => spStatus
+        pGshStatus => myGshStatus
+        pSpStatus => mySpStatus
         pGsh => pDisc%myGsh
         pSp => pDisc%mySp
         !
@@ -172,21 +177,55 @@ contains
         call gshInRate%create()
         !
         ! 1- Get instantaneous SN disruption power, the energy per time unit generes by SNs
-        Qsn = pSp%iSNP()
+        Qsn = pSp%iSNPower()
         !
         ! 2- Get instantaneous gas ejection rate produced by the stellar population
         !    Add to the current fresh gas input rate
-        ejR = pSp%iEJR()
+        ejR = pSp%iEjRate()
         gshInRate = inRate + ejR
         !
         ! 3- Get the instantaneous SFR
-        iSFR = pGsh%iSFR()
+        spInRate = pGsh%iSFR()
         !
-        ! 4- Evolve gas structuration history
-        call this%myGsh%stevolve(dt, st, l, Qsn, gshInRate, outRate, pGshStatus, pGsh)
+        ! 4 Status of the gas structuration history
+        ! 4a- Get complet status of the gas structuration history
+        aGshStatus = pGsh%ststatus(st, l, Qsn, gshInRate, pGshStatus)
+        ! 4b- Switch to current status
+        if (.not. solver_isFinalStep(st)) then
+            ! Compute intermediate state according to current status
+            pGshStatus => aGshStatus
+        end if
+        ! 4c- Get optimal time-step
+        gshDt = this%myGsh%dtoptim(dt, pGshStatus)
         !
-        ! 5- Evolve the stellar population
-        call this%mySp%stevolve(dt, st, iSFR, spOutRate, pSpStatus, pSp)
+        ! 5- Status of the stellar population
+        ! 5a- Get complet status of the stellar population
+        aSpStatus = pSp%ststatus(st, spInRate, pSpStatus)
+        ! 5b- Switch to current status
+        if (.not. solver_isFinalStep(st)) then
+            ! Compute intermediate state according to current status
+            pSpStatus => aSpStatus
+        end if
+        ! 5b- Get optimal time-step (start from adt)
+        adt = this%mySp%dtoptim(gshDt, pSpStatus)
+        ! 6- Evolution of the gas structuration history
+        call this%myGsh%stevolve(st, adt, pGshStatus, outrate, pGsh)
+        !
+        ! 7- Evolve the stellar population
+        call this%mySp%stevolve(st, adt, pSpStatus, spOutRate, pSp)
+        !
+        ! 8 Deallocate current status
+        do s = 1, nScales
+            call pGshStatus(s)%delete()
+        end do
+        deallocate(aGshStatus)
+        ! Delete intermediate status
+        do iAge = 1, nAgeBins
+            do jMet = 1, nMetBins
+                call aSpStatus(iAge, jMet)%delete()
+            end do
+        end do
+        deallocate(aSpStatus)
 
     end subroutine disc_stevolve
 
@@ -205,7 +244,7 @@ contains
 
         integer(kind=ikd)              :: st          ! Step index of evolution scheme
 
-        real(kind=rkd), intent(in)     :: dt          ! The disc evolves during dt
+        real(kind=rkd), intent(inout)  :: dt          ! The disc evolves during dt
         real(kind=rkd), intent(in)     :: l           ! The disc gas injection scale
 
         type(gas), intent(in)          :: inRate      ! The (dt-)constant input rate
@@ -221,7 +260,7 @@ contains
         pDisc => aDisc
         ! Apply solver steps
         do st = 1, nSolverStep
-            call this%stevolve(dt, st, l, inRate, outRate, pDisc)
+            call this%stevolve(st, dt, l, inRate, outRate, pDisc)
         end do
         ! Save complete evolved state
         this = aDisc

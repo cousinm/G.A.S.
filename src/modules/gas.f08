@@ -329,16 +329,20 @@ contains
 
         implicit none
 
-        type(gas), intent(in)            :: g
+        integer(kind=ikd)       :: e
+        type(gas), intent(in)   :: g
 
-        class(gas)                       :: this
+        class(gas)              :: this
 
         ! @ this point all checks have been done, we can substract g to this
         ! Substract
-        this%mass = this%mass - g%mass  ! Total mass
-        this%mZ   = this%mZ - g%mZ      ! Metal mass
-        this%Eint = this%Eint - g%Eint  ! Internal energy
-        this%elts = this%elts - g%elts  ! Specific element mass
+        this%mass = max(real(0.d0, kind=rkd), this%mass - g%mass)  ! Total mass
+        this%mZ   = max(real(0.d0, kind=rkd), this%mZ - g%mZ)      ! Metal mass
+        this%Eint = max(real(0.d0, kind=rkd), this%Eint - g%Eint)  ! Internal energy
+        do e = 1, nElts
+            ! Specific element mass
+            this%elts(e) = max(real(0.d0, kind=rkd), this%elts(e) - g%elts(e))
+        end do
 
     end subroutine gas_sub
 
