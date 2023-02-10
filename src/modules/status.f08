@@ -21,7 +21,6 @@ module status_mod
     !
     ! Define evolution status structure
     type status
-        real(kind=rkd)  :: mass   ! Reference mass (set at st = 1)
         type(gas)       :: in     ! Input rate
         type(gas)       :: tr     ! Internal transfer rate
         type(gas)       :: out    ! Output rate
@@ -67,9 +66,12 @@ contains
 
         class(status)           :: this     ! The current status
 
-        this%in = in        ! Set input rate
-        this%tr = tr        ! Set internal tranfer rate
-        this%out = out      ! Set output rate
+        call this%in%create()
+        if (in%isCreated()) this%in = in        ! Set input rate
+        call this%tr%create() 
+        if (tr%isCreated()) this%tr = tr        ! Set internal tranfer rate
+        call this%out%create()
+        if (out%isCreated()) this%out = out     ! Set output rate
 
     end subroutine status_set
 
@@ -122,17 +124,19 @@ contains
     !
 
     ! **********************************
-    function status_dtmax(this, dt, mass) result(dt_max)
+    function status_dtmax(this, st, dt, mass) result(dt_max)
 
         ! Return the maximal time step value possible to keep mass variations positive
+
+        integer(kind=ikd), intent(in) :: st                ! solver step
 
         real(kind=rkd), intent(in)    :: dt
         real(kind=rkd), intent(in)    :: mass
         real(kind=rkd)                :: dmOut, dmIn, dmTr ! Output, input, and transfered masses
         real(kind=rkd)                :: dm
-        real(kind=rkd)                :: dt_max
+        real(kind=rkd)                :: dt_max, wt
 
-        class(status)                 :: this     ! The current status
+        class(status)                 :: this              ! The current status
         !
         ! Init to current dt
         dt_max = dt
@@ -151,6 +155,13 @@ contains
             ! dt should be adapted
             dt_max = min(dt_max, mass / abs(this%in%mass - this%tr%mass - this%out%mass))
         end if
+        if (dt_max < dt) then
+            wt = solver_wdt(st)
+            if (dt_max >  wt * dt) then
+                dt_max = dt
+            end if
+        end if
+
     end function status_dtmax
 
 end module status_mod

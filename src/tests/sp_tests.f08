@@ -44,15 +44,15 @@ contains
         isValid = test_sp_new()
         write(u, '(a,l)') 'test_sp_new: ', isValid
 
-        !call cpu_time(tstart)
-        !isValid = test_sp_instantaneous_burst()
-        !call cpu_time(tend)
-        !write(u, '(a,f7.3,a,l)') 'test_sp_instantaneous_burst (', tend-tstart, ' sec): ', isValid
+        call cpu_time(tstart)
+        isValid = test_sp_instantaneous_burst()
+        call cpu_time(tend)
+        write(u, '(a,f7.3,a,l)') 'test_sp_instantaneous_burst (', tend-tstart, ' sec): ', isValid
 
         call cpu_time(tstart)
-        isValid = test_sp_constant_SFR()
+        isValid = test_sp_constant_injection_and_stop()
         call cpu_time(tend)
-        write(u, '(a,f7.3,a,l)') 'test_sp_constant_SFR (', tend-tstart, ' sec): ', isValid
+        write(u, '(a,f7.3,a,l)') 'test_sp_constant_injection_and_stop (', tend-tstart, ' sec): ', isValid
 
         ! Close log file
         close(u)
@@ -122,57 +122,52 @@ contains
         character(MAXPATHSIZE)         :: filename
 
         real(kind=rkd), parameter      :: dt = real(1.d-4, kind=rkd)  ! CU [Gyr]
+        real(kind=rkd), parameter      :: M = real(1.d-5, kind=rkd)   ! CU [10^11Msun]
         real(kind=rkd), parameter      :: evolTime = 3.d0             ! CU [Gyr]
         real(kind=rkd)                 :: t
         real(kind=rkd)                 :: adt
         real(kind=rkd)                 :: solution, diff
 
         type(gas)                      :: inRate   ! The constant SFR
-        type(gas)                      :: outRate  ! wind/sn ejection rate
         type(gas)                      :: ejGas    ! Gas ejected by stellar population
         type(sp)                       :: aSp      ! A stellar population
 
         isValid = .TRUE.
 
         ! Init inRate
-        inRate = real(10.d0 * MassRate_CU, kind=rkd) * initAbund(3)  ! 10Msun/yr in CU
-        ! Init outRate
-        call outRate%create()
+        call inRate%create()
 
         ! Create the stellar population
         call aSp%create()
+        ! Create a 1e6 Msun ssp in the first age bin
+        aSp%mass = M
+        aSp%sfh(1, 3)%mass = M
+        !
         ! Create gas reservoir
         call ejGas%create()
 
         ! Open data files for this test
         write(filename, '(a,a,i2.2,a)') trim(validPath), '/sp_test_instantaneous_burst.dat'
         open(unit=u, file=filename, status='new')
-        write(u, '(a)') '# t | stellar mass [CU] | gas mass [CU] | solution | diff | mAge'
+        write(u, '(a)') '# time | Stellar mass | Gas mass | Solution | Error '
 
         ! Evolution
         t = 0.d0 ! init
-        solution = 0.
+        solution = M
         diff = 0.
         do while (t < evolTime)
             !
-            write(u, *) t, aSp%mass, ejGas%mass, solution, diff, aSp%mAge
-            !
-            if (t > 0.) then
-                inRate = real(0.d0 * MassRate_CU, kind=rkd) * initAbund(3)  ! 10Msun/yr in CU
-            end if
-            !
-            ! Compute real solution
-            solution = solution + inRate%mass * dt
+            write(u, *) t, aSp%mass, ejGas%mass, solution, diff
             !
             ! Compute evolution
             adt = dt
-            call aSp%evolve(adt, inRate, outRate)
+            call aSp%evolve(adt, inRate)
             !
             ! Update ejected gas reservoir
-            ejGas = ejGas + adt * outRate
+            ejGas = ejGas + adt * aSp%myStatus%out
             !
             ! Test, mass conservation
-            diff = abs(ejGas%mass + aSp%mass - solution)
+            diff = ejGas%mass + aSp%mass - solution
             if (diff > num_accuracy) then
                 isValid = .FALSE.
             end if
@@ -184,11 +179,12 @@ contains
 
         ! Delete structure
         call aSp%delete()
+        call inRate%delete()
 
     end function test_sp_instantaneous_burst
 
     ! **********************************
-    function test_sp_constant_SFR() result(isValid)
+    function test_sp_constant_injection_and_stop() result(isValid)
 
         ! Test stellar population evolution according to a constant SFR
 
@@ -200,14 +196,13 @@ contains
 
         character(MAXPATHSIZE)         :: filename
 
-        real(kind=rkd), parameter      :: dt = real(1.d-4, kind=rkd)  ! CU [Gyr]
-        real(kind=rkd), parameter      :: evolTime = 1.d0             ! CU [Gyr]
+        real(kind=rkd), parameter      :: dt = real(1.d-4, kind=rkd)        ! CU [Gyr]
+        real(kind=rkd), parameter      :: evolTime = real(2.d0, kind=rkd)   ! CU [Gyr]
         real(kind=rkd)                 :: t
         real(kind=rkd)                 :: adt
         real(kind=rkd)                 :: solution, diff
 
         type(gas)                      :: inRate   ! The constant SFR
-        type(gas)                      :: outRate  ! SN ejection rate
         type(gas)                      :: ejGas    ! Gas ejected by stellar population
         type(sp)                       :: aSp      ! A stellar population
 
@@ -215,8 +210,6 @@ contains
 
         ! Init inRate
         inRate = real(1.d1 * MassRate_CU, kind=rkd) * initAbund(3)  ! 10Msun/yr in CU
-        ! Init outRate
-        call outRate%create()
 
         ! Create the stellar population
         call aSp%create()
@@ -224,9 +217,9 @@ contains
         call ejGas%create()
 
         ! Open data files for this test
-        write(filename, '(a,a,i2.2,a)') trim(validPath), '/sp_test_constant_SFR.dat'
+        write(filename, '(a,a,i2.2,a)') trim(validPath), '/sp_test_constant_injection_and_stop.dat'
         open(unit=u, file=filename, status='new')
-        write(u, '(a)') '# t | stellar mass [CU] | gas mass [CU] | solution | diff | mAge'
+        write(u, '(a)') '# time | Stellar mass | Gas mass | Solution | Error'
 
         ! Evolution
         solution = 0.d0
@@ -234,20 +227,22 @@ contains
         t = 0.d0 ! init
         do while (t < evolTime)
             !
-            write(u, *) t, aSp%mass, ejGas%mass, solution, diff, aSp%mAge
+            if (t > 0.5) call inRate%create()
+            !
+            write(u, *) t, aSp%mass, ejGas%mass, solution, diff
             !
             ! Compute evolution
             adt = dt
-            call aSp%evolve(adt, inRate, outRate)
+            call aSp%evolve(adt, inRate)
             !
             ! Compute real solution
             solution = solution + inRate%mass * adt
             !
             ! Update ejected gas reservoir
-            ejGas = ejGas + adt * outRate
+            ejGas = ejGas + adt * aSp%myStatus%out
             !
             ! Test, mass conservation
-            diff = abs(ejGas%mass + aSp%mass - solution)
+            diff = ejGas%mass + aSp%mass - solution
             if (diff > num_accuracy) then
                 isValid = .FALSE.
             end if
@@ -258,8 +253,10 @@ contains
         close(u)
 
         ! Delete structure
+        call inRate%delete()
+        call ejGas%delete()
         call aSp%delete()
 
-    end function test_sp_constant_SFR
+    end function test_sp_constant_injection_and_stop
 
 end module sp_tests_mod

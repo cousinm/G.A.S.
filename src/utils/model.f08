@@ -34,7 +34,8 @@ module model_mod
     character(MAXPATHSIZE)  :: IMF       ! Initial Mass Function Reference
     !
     ! Define feedback parameters
-    real(kind=rkd)     :: Vwind          ! Velocity of gas ejected from the gsh
+    real(kind=rkd)     :: gasDisruptionEfficiency  ! Gas disruption efficiency [0, 1]
+    real(kind=rkd)     :: Vwind                    ! Velocity of gas ejected from the gsh
 
 contains
 
@@ -94,7 +95,10 @@ contains
                 case ('solver')
                     read(val, '(a)') solver
                     call solver_init(solver)
-                ! scale
+                case ('dt_max', 'dt')
+                    read(val, *) solver_dt
+                !
+                ! Scale
                 case ('lStar')
                     read(val, *) lStar
                 case ('sigmaStar')
@@ -103,15 +107,20 @@ contains
                     read(val, *) muStar
                 case ('mu_slope')
                     read(val, *) mu_slope
-                ! gsh
+                !
+                ! Gsh
                 case ('nScales')
                     read(val, *) nScales
                 case ('stepFactor')
                     read(val, *) stepFactor
-                ! stellar populations
+                !
+                ! Stellar populations
                 case ('IMF')
                     read(val, '(a)') IMF
-                ! feedback
+                !
+                ! Feedback
+                case ('disrupt_eff', 'disrupt_efficiency')
+                    read(val, *) gasDisruptionEfficiency
                 case ('Vwind', 'vWind', 'VWind')
                     read(val, *) Vwind
                     ! conversion in code unit

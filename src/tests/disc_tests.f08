@@ -42,9 +42,9 @@ module disc_test_mod
         open(unit=u, file=filename, status='new')
 
         call cpu_time(tstart)
-        isValid = test_disc_constant_injection()
+        isValid = test_disc_constant_injection_and_stop()
         call cpu_time(tend)
-        write(u, '(a,f7.3,a,l)') 'test_disc_constant_injection (', tend-tstart, ' sec): ', isValid
+        write(u, '(a,f7.3,a,l)') 'test_disc_constant_injection_and_stop (', tend-tstart, ' sec): ', isValid
 
         ! Close log file
         close(u)
@@ -88,11 +88,12 @@ module disc_test_mod
     end function test_disc_delete
 
     ! **********************************
-    function test_disc_constant_injection() result(isValid)
+    function test_disc_constant_injection_and_stop() result(isValid)
 
         implicit none
 
         integer(kind=ikd), parameter   :: u = 10000        ! file unit
+        integer(kind=ikd), parameter   :: v = 10001        ! file unit
 
         logical                      :: isValid
 
@@ -106,7 +107,6 @@ module disc_test_mod
         real(kind=rkd)               :: solution, diff
 
         type(gas)                    :: inRate       ! The constant injection rate at scale l
-        type(gas)                    :: outRate      ! Output rate (gas ejected from the gsh, here = 0)
         type(gas)                    :: ejGas        ! Ejected gas
 
         type(disc)                   :: aDisc        ! A disc
@@ -122,9 +122,15 @@ module disc_test_mod
         call ejGas%create()
 
         ! Open data files for this test
-        write(filename, '(a,a,i2.2,a)') trim(validPath), '/disc_test_constant_injection.dat'
+        ! Mass conservation data file
+        write(filename, '(a,a,i2.2,a)') trim(validPath), '/disc_test_constant_injection_and_stop.dat'
         open(unit=u, file=filename, status='new')
-        write(u, '(a)') '# t | Gas mass | Star mass | Ej gas mass | solution | diff'
+        write(u, '(a)') '# time | Gas mass | Star mass | Ejected gas mass | Solution | Error'
+        !
+        ! Results file
+        write(filename, '(a,a,i2.2,a)') trim(validPath), '/disc_results_constant_injection_and_stop.dat'
+        open(unit=v, file=filename, status='new')
+        write(v, '(a)') '# time | inRate | SFR | outRate | Solution | Error'
         !
         ! Evolution
         t = 0.d0         ! init
@@ -132,21 +138,28 @@ module disc_test_mod
         diff = 0.d0      ! init
         do while (t < evolTime)
             !
+            if (t > 0.05) then
+                call inRate%create()
+            end if
+            !
             ! Save
             write(u, *) t, aDisc%myGsh%mass, aDisc%mySp%mass, ejGas%mass, solution, diff
+            write(v, *) t, aDisc%myGsh%myStatus%in%mass, &
+                        aDisc%mySp%myStatus%in%mass, aDisc%myGsh%myStatus%out%mass, solution, diff
             !
             ! Compute evolution
             adt = dt
-            call aDisc%evolve(adt, l, inRate, outRate)
+            call aDisc%evolve(adt, l, inRate)
+            if (adt < dt) write(v, *) 'adatative time-step:', adt
             !
             ! Compute real solution
             solution = solution + inRate%mass * adt
             !
             ! Update ejected gas reservoir
-            ejGas = ejGas + adt * outRate
+            ejGas = ejGas + adt * aDisc%myGsh%myStatus%out
             !
             ! Test, mass conservation
-            diff = abs(aDisc%myGsh%mass + aDisc%mySp%mass + ejGas%mass - solution)
+            diff = aDisc%myGsh%mass + aDisc%mySp%mass + ejGas%mass - solution
             if (diff > num_accuracy) then
                 isValid = .FALSE.
             end if
@@ -155,14 +168,14 @@ module disc_test_mod
 
         ! Close data file
         close(u)
+        close(v)
 
         ! Delete structures
         call aDisc%delete()
         call inRate%delete()
         call ejGas%delete()
-        call outRate%delete()
 
-    end function test_disc_constant_injection
+    end function test_disc_constant_injection_and_stop
 
     ! **********************************
 

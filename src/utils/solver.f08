@@ -16,7 +16,10 @@ module solver_mod
 
     ! Define integration scheme
     character(MAXPATHSIZE)   :: solver
+
     integer(kind=ikd)        :: nSolverStep
+
+    real(kind=rkd)           :: solver_dt
 
 contains
 

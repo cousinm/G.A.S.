@@ -24,12 +24,12 @@ program GAS_tests
     ! Run all "scale" object tests
     call scale_all_tests()
     ! Run all "gsh" object tests
-    !call gsh_all_tests()
+    call gsh_all_tests()
     ! Run all "ssp" object tests
-    !call ssp_all_tests()
+    call ssp_all_tests()
     ! Run all "sp" object tests
-    !call sp_all_tests()
+    call sp_all_tests()
     ! Run all "disc" object tests
-    ! call disc_all_tests()
+    call disc_all_tests()
     
 end program GAS_tests

@@ -32,6 +32,7 @@ module sp_mod
         real(kind=rkd)           :: mZ              ! Mass-weighted average metelicity
         real(kind=rkd)           :: lZ              ! Luminosity-weighted average metalicity
         type(ssp), allocatable   :: sfh(:, :)       ! Star Formation History
+        type(status)             :: myStatus        ! Global status of the sp intput/transfer/output
     contains
         procedure  :: create => sp_create           ! Create a complete stellar population
         procedure  :: delete => sp_delete           ! Delete a stellar population structure
@@ -49,11 +50,13 @@ module sp_mod
     end type sp
 
     ! Define sp specific parameters
-    real(kind=rkd), allocatable :: gas2sp(:, :)   ! gas to sp matrix conversion, based on abundancies
+    real(kind=rkd), parameter   :: sp_mass_accuracy = real(1.d-15, kind=rkd)
+    real(kind=rkd), allocatable :: gas2sp(:, :)                                ! gas to sp matrix conversion, based on abundancies
+    
 
-    ! TEMPORARY INTERMEDIATE STATUS
-    ! Targets
-    type(status), allocatable, target :: mySpStatus(:, :)
+    ! STATUS
+    type(status), allocatable, target :: spStatus(:, :)
+    type(status), allocatable, target :: spFinalStatus(:, :)
 
     ! INTERFACE OPERATOR DECLARATIONS
 
@@ -81,8 +84,12 @@ contains
         call ssp_init()
 
         ! Init intermediate status
-        if (.not. allocated(mySpStatus)) then
-            allocate(mySpStatus(nAgeBins, nMetBins))
+        if (.not. allocated(spStatus)) then
+            allocate(spStatus(nAgeBins, nMetBins))
+        end if
+        ! Init final status
+        if (.not. allocated(spFinalStatus)) then
+            allocate(spFinalStatus(nAgeBins, nMetBins))
         end if
 
         ! Build gas to stellar population conversion matrix
@@ -113,13 +120,22 @@ contains
         integer(kind=ikd)     :: i, j
 
         ! Deallocate spStatus
-        if (allocated(mySpStatus)) then
+        if (allocated(spStatus)) then
             do i = 1, nAgeBins
                 do j = 1, nMetBins
-                    call mySpStatus(i, j)%delete()
+                    call spStatus(i, j)%delete()
                 end do
             end do
-            deallocate(mySpStatus)
+            deallocate(spStatus)
+        end if
+        ! Deallocate spFinalStatus
+        if (allocated(spFinalStatus)) then
+            do i = 1, nAgeBins
+                do j = 1, nMetBins
+                    call spStatus(i, j)%delete()
+                end do
+            end do
+            deallocate(spFinalStatus)
         end if
 
         ! Build gas to stellar population conversion matrix
@@ -140,11 +156,12 @@ contains
 
         class(sp)            :: this
 
-        this%mass = 0.d0   ! Total mass of the stellar population
-        this%mAge = 0.d0   ! Mass-weighted average age
-        this%lAge = 0.d0   ! Luminosity-weighted average age
-        this%mZ = 0.d0     ! Mass-weighted average metelicity
-        this%lZ = 0.d0     ! Luminosity-weighted average metalicity
+        this%mass = 0.d0             ! Total mass of the stellar population
+        this%mAge = 0.d0             ! Mass-weighted average age
+        this%lAge = 0.d0             ! Luminosity-weighted average age
+        this%mZ = 0.d0               ! Mass-weighted average metelicity
+        this%lZ = 0.d0               ! Luminosity-weighted average metalicity
+        call this%myStatus%create()  ! Create and init status
 
         allocate(this%sfh(nAgeBins, nMetBins)) ! Star Formation History
         do iAge = 1, nAgeBins
@@ -163,11 +180,12 @@ contains
 
         class(sp)     :: this
 
-        this%mass = 0.d0   ! Total mass of the stellar population
-        this%mAge = 0.d0   ! Mass-weighted average age
-        this%lAge = 0.d0   ! Luminosity-weighted average age
-        this%mZ = 0.d0     ! Mass-weighted average metelicity
-        this%lZ = 0.d0     ! Luminosity-weighted average metalicity
+        this%mass = 0.d0             ! Total mass of the stellar population
+        this%mAge = 0.d0             ! Mass-weighted average age
+        this%lAge = 0.d0             ! Luminosity-weighted average age
+        this%mZ = 0.d0               ! Mass-weighted average metelicity
+        this%lZ = 0.d0               ! Luminosity-weighted average metalicity
+        call this%myStatus%delete()  !
 
         if (allocated(this%sfh)) deallocate(this%sfh)
 
@@ -192,11 +210,12 @@ contains
         end if
 
         ! Copy fields
-        this%mass = aSp%mass   ! Total mass of the stellar population
-        this%mAge = aSp%mAge   ! Mass-weighted average age
-        this%lAge = aSp%lAge   ! Luminosity-weighted average age
-        this%mZ = aSp%mZ       ! Mass-weighted average metelicity
-        this%lZ = aSp%lZ       ! Luminosity-weighted average metalicity
+        this%mass = aSp%mass         ! Total mass of the stellar population
+        this%mAge = aSp%mAge         ! Mass-weighted average age
+        this%lAge = aSp%lAge         ! Luminosity-weighted average age
+        this%mZ = aSp%mZ             ! Mass-weighted average metelicity
+        this%lZ = aSp%lZ             ! Luminosity-weighted average metalicity
+        this%myStatus = aSp%myStatus ! Current global status
 
         ! Copy star formation history
         do i = 1, nAgeBins
@@ -209,7 +228,7 @@ contains
     end subroutine sp_copy
 
     ! **********************************
-    subroutine sp_evolve(this, dt, inRate, outRate)
+    subroutine sp_evolve(this, dt, inRate)
 
         ! Evolve, during dt, the current complete stellar population
         ! according to :
@@ -222,58 +241,129 @@ contains
         implicit none
 
         integer(kind=ikd)                 :: st             ! Step index of evolution scheme
-        integer(kind=ikd)                 :: iAge, jMet
 
         real(kind=rkd), intent(inout)     :: dt             ! The scale is evolve during dt
 
         type(gas), intent(in)             :: inRate         ! The (dt-)constant input rate
-        type(gas), intent(out)            :: outRate        ! Pointer to the wind/sn output rate
 
         type(sp), target                  :: aSp            ! The current state
         type(sp), pointer                 :: pSp            ! Pointer to the current state
         
-        type(status), pointer             :: pStatus(:, :)  ! Pointer to the final status
-        type(status), allocatable, target :: aStatus(:, :)  ! Current status
+        type(status), pointer             :: pStatus(:, :)       ! Pointer to the "current" status
+        type(status), pointer             :: pFinalStatus(:, :)  ! Pointer to the "final" status
 
         class(sp)                         :: this           ! The current stellar population
 
         ! Init intermediate status with the current status
         aSp = this
+        ! Pointer to the status
+        pFinalStatus => spFinalStatus
+        ! Pointer to the current state
         pSp => aSp
         ! Loop over integration steps
         do st = 1, nSolverStep
             !
             ! Get the current status of the sp and update "final" status
-            pStatus => mySpStatus
-            aStatus = pSp%ststatus(st, inRate, pStatus)
+            pStatus => spStatus
+            call pSp%ststatus(st, inRate, pStatus, pFinalStatus)
             !
-            if (.not. solver_isFinalStep(st)) then
-                ! Compute intermediate state according to current status
-                pStatus => aStatus
+            if (solver_isFinalStep(st)) then
+                ! Switch to final status
+                pStatus => spFinalStatus
             end if
             !
             ! Adaptative time-step
-            dt = this%dtoptim(dt, pStatus)
+            dt = this%dtoptim(st, dt, pStatus)
             !
             ! Get new state
-            call this%stevolve(st, dt, pStatus, outRate, pSp)
+            call this%stevolve(st, dt, pStatus, pSp)
         end do
         ! Save complete evolved state
         this = aSp
         ! Delete the tmp sp structure
         call aSp%delete()
-        ! Delete intermediate status
-        do iAge = 1, nAgeBins
-            do jMet = 1, nMetBins
-                call aStatus(iAge, jMet)%delete()
-            end do
-        end do
-        deallocate(aStatus)
 
     end subroutine sp_evolve
 
     ! **********************************
-    subroutine sp_stevolve(this, st, dt, pStatus, outRate, pSp)
+    subroutine sp_ststatus(this, st, inRate, pStatus, pFinalStatus)
+
+        ! Compute current status of the stellar population
+        ! according to :
+        ! - Internal evolution processes
+        ! - A gas input rate (due to external SFR): "inRate"
+
+        implicit none
+
+        integer(kind=ikd), intent(in)   :: st
+        integer(kind=ikd)               :: iAge, jMet
+
+        type(gas), intent(in)           :: inRate         ! The external input rate (SFR)
+        type(gas)                       :: outRate        ! SN ejecta rate
+        type(gas)                       :: sspInRate      ! Input rate of the current ssp
+        type(gas), allocatable          :: inRateBins(:)  ! Gas distribution into metalicity bins
+
+        type(ssp), pointer              :: pSsp           ! Pointer to the current ssp stage
+        
+        type(status), pointer           :: pStatus(:, :)       ! Pointer to the "current" status
+        type(status), pointer           :: pFinalStatus(:, :)  ! Pointer to the "final" status
+        type(status), pointer           :: pSspStatus          ! Pointer to the "current" status of the ssp
+        type(status), pointer           :: pSspFinalStatus     ! Pointer to the final status
+
+        class(sp), target               :: this           ! The current stellar population
+        !
+        ! Init outRate => SN ejecta rate
+        call outRate%create()
+        ! Reset global status
+        call this%myStatus%create()
+        !
+        ! Loop on metalicity bins
+        do jMet = 1, nMetBins
+            ! reset sspInrate
+            call sspInRate%create()
+            !
+            ! Loop on age bins
+            do iAge = 1, nAgeBins
+                !
+                ! Get pointers
+                pSspStatus => pStatus(iAge, jMet)
+                pSspFinalStatus => pFinalStatus(iAge, jMet)
+                pSsp => this%sfh(iAge, jMet)
+                !
+                ! Input rate (SFR) is only applied to the youngest ssp
+                if (iAge == 1 .and. inRate%mass > 0.d0) then
+                    ! Distribute gas input stellar metalicity bins
+                    inRateBins = g2s(inRate)
+                    sspInRate = sspInRate + inRateBins(jMet)
+                end if
+                !
+                ! Update ssp status, take into account internal transfer rate
+                call pSsp%ststatus(sspInRate, pSspStatus)
+                !
+                ! Update final status
+                call pSspFinalStatus%update(st, pSspStatus)
+                !
+                ! The transfer rate of the current ssp become an input rate
+                ! for the next (older) age bin
+                sspInRate = pSspStatus%tr
+                !
+                ! Update SN ejecta Rate
+                if (pSspFinalStatus%out%isCreated()) then
+                    outRate = outRate + pSspFinalStatus%out
+                end if
+                !
+            end do ! Age loop
+        end do ! Met loop
+        !
+        ! Set the average input rate applied
+        ! Set the average SN output rate applied
+        this%myStatus%in = inRate
+        this%myStatus%out = outRate
+
+    end subroutine sp_ststatus
+
+    ! **********************************
+    subroutine sp_stevolve(this, st, dt, pStatus, pSp)
 
         ! Apply the next step "st" of the complete integration scheme
         ! according to aStatus
@@ -291,8 +381,6 @@ contains
         real(kind=rkd)                  :: mAge           ! mass weighted age
         real(kind=rkd)                  :: mZ             ! average metalicity
 
-        type(gas), intent(out)          :: outRate        ! Global output rate
-
         type(status), pointer           :: pStatus(:, :)  ! Pointer to the final status of the current sp
         type(status), pointer           :: pSspStatus     ! Pointer to the current status of the ssp
 
@@ -303,9 +391,9 @@ contains
         class(sp)                       :: this           ! The current stellar population
 
         ! Init
-        ! outRate, global gas ejecta rate
-        call outRate%create()
-        ! Init the new state to the current one
+        ! Get current status
+        this%myStatus = pSp%myStatus
+        ! And reset the new state to the current one (status is kept)
         pSp = this
         ! Total mass
         mass = real(0.d0, kind=rkd)
@@ -321,13 +409,8 @@ contains
                 !
                 if (pSsp%mass > 0.d0 .or. pSspStatus%in%mass > 0.d0) then
                     !
-                    ! Apply the new solver step for the scale
+                    ! Apply the new solver step
                     call this%sfh(iAge, jMet)%stevolve(st, dt, pSspStatus, pSsp)
-                    !
-                    ! Update global ejecta rate
-                    if (pSspStatus%out%isCreated()) then
-                        outRate = outRate + pSspStatus%out
-                    end if
                     !
                     ! Update total mass of the stellar population
                     mass = mass + pSsp%mass
@@ -341,7 +424,7 @@ contains
             end do ! Age loop
         end do ! Met loop
         !
-        ! Set total massgsh
+        ! Set total mass
         pSp%mass = mass
         !
         ! Set mass weighted age
@@ -405,7 +488,7 @@ contains
         ! Test null values
         if (sum(B) <= num_accuracy) then
             do i = 1, nMetBins
-                gasBins(i) = real(0.d0, kind=rkd) * initAbund(i)
+                call gasBins(i)%create()
             end do
             deallocate(B)
             return
@@ -424,7 +507,7 @@ contains
         max = maxval(B)
         do i = 1, nMetBins
             r = abs(B(i)/max)
-            if (r < 1.d-5 .or. B(i)<num_accuracy) B(i) = 0.d0
+            if (r < 1.d-4 .or. B(i) < sp_mass_accuracy) B(i) = 0.d0
         end do
         ! Normalisation
         mass = sum(B)
@@ -443,85 +526,25 @@ contains
     end function g2s
 
     ! **********************************
-    function sp_ststatus(this, st, inRate, pStatus) result(aStatus)
-
-        ! Compute current status of the stellar population
-        ! according to :
-        ! - Internal evolution processes
-        ! - A gas input rate (due to external SFR): "inRate"
-
-        implicit none
-
-        integer(kind=ikd), intent(in)   :: st
-        integer(kind=ikd)               :: iAge, jMet
-
-        type(gas), intent(in)           :: inRate         ! The external input rate (SFR)
-        type(gas)                       :: sspInRate      ! Input rate of the current ssp
-        type(gas), allocatable          :: inRateBins(:)  ! Gas distribution into metalicity bins
-
-        type(ssp), pointer              :: pSsp           ! Pointer to the current ssp stage
-        
-        type(status), allocatable       :: aStatus(:, :)  ! Current status
-        type(status), pointer           :: pStatus(:, :)  ! Pointer to the final status of the current sp
-        type(status), pointer           :: pSspStatus     ! Pointer to the current status of the ssp
-
-        class(sp), target               :: this           ! The current stellar population
-        !
-        ! Allocate aStatus,
-        ! this array SHOULD be deallocated at the end of the complete step evolution
-        allocate(aStatus(nAgeBins, nMetBins))
-        !
-        ! Init sspInRate, sspOutRate and outRate
-        call sspInRate%create()
-        !
-        ! Loop on metalicity bins
-        do jMet = 1, nMetBins
-            ! Loop on age bins
-            do iAge = 1, nAgeBins
-                !
-                ! Get pointers
-                pSspStatus => pStatus(iAge, jMet)
-                pSsp => this%sfh(iAge, jMet)
-                !
-                ! Input rate (SFR) is only applied to the youngest ssp
-                if (iAge == 1) then
-                    ! Distribute gas input stellar metalicity bins
-                    inRateBins = g2s(inRate)
-                    sspInRate = sspInRate + inRateBins(jMet)
-                end if
-                !
-                ! Update ssp status, take into account internal transfer rate
-                ! Update the "final" status
-                aStatus(iAge, jMet) = pSsp%ststatus(st, sspInRate, pSspStatus)
-                !
-                ! The transfer rate of the current ssp become an input rate
-                ! for the next (older) age bin
-                sspInRate = aStatus(iAge, jMet)%tr
-                !
-            end do ! Age loop
-        end do ! Met loop
-
-    end function sp_ststatus
-
-    ! **********************************
-    function sp_dtoptim(this, dt, pStatus) result(adt)
+    function sp_dtoptim(this, st, dt, pStatus) result(adt)
 
         ! Return the optim time-step accoring to current status
         ! and mass
 
         implicit none
 
-        integer(kind=ikd)          :: iAge, jMet
+        integer(kind=ikd), intent(in)  :: st
+        integer(kind=ikd)              :: iAge, jMet
 
-        real(kind=rkd), intent(in) :: dt           ! time-step
-        real(kind=rkd)             :: adt
+        real(kind=rkd), intent(in)     :: dt           ! time-step
+        real(kind=rkd)                 :: adt
 
-        type(status), pointer      :: pStatus(:,:) ! Pointer to the current set of status
-        type(status), pointer      :: pSspStatus   ! Pointer to a current scale status
+        type(status), pointer          :: pStatus(:,:) ! Pointer to the current set of status
+        type(status), pointer          :: pSspStatus   ! Pointer to a current scale status
 
-        type(ssp), pointer         :: pSsp         ! Pointer to a ssp
+        type(ssp), pointer             :: pSsp         ! Pointer to a ssp
 
-        class(sp), target          :: this
+        class(sp), target              :: this
 
         ! Run through the different ssp
         ! and deduce optimal time-step
@@ -537,7 +560,7 @@ contains
                 pSsp => this%sfh(iAge, jMet)
                 !
                 if (pSsp%mass > 0.d0) then
-                    adt = pSspStatus%dtMax(adt, pSsp%mass)
+                    adt = pSspStatus%dtMax(st, adt, pSsp%mass)
                 end if
             end do
         end do
@@ -556,7 +579,6 @@ contains
         integer(kind=ikd)  :: iAge, jMet
 
         real(kind=rkd)     :: Q
-        real(kind=rkd)     :: mbin
 
         class(sp)          :: this
 
@@ -564,10 +586,7 @@ contains
         Q = real(0.d0, kind=rkd)
         do jMet = 1, nMetBins
             do iAge = 1, nAgeBins
-                mbin = this%sfh(iAge, jMet)%mass
-                if (mbin > 0.d0) then
-                    Q = Q + mbin * SNR(iAge, jMet)*Esn   ! [CU]
-                end if
+                Q = Q + this%sfh(iAge, jMet)%snp()
             end do ! Age loop
         end do ! Met loop
 
@@ -583,8 +602,6 @@ contains
 
         integer(kind=ikd)  :: iAge, jMet
 
-        real(kind=rkd)     :: mbin
-
         type(gas)          :: rate
 
         class(sp)          :: this
@@ -593,10 +610,7 @@ contains
         call rate%create()
         do jMet = 1, nMetBins
             do iAge = 1, nAgeBins
-                mbin = this%sfh(iAge, jMet)%mass
-                if (mbin > 0.d0) then
-                    rate = rate + mbin * MLR(iAge, jMet)  ! [CU]
-                end if
+                rate = rate + this%sfh(iAge, jMet)%mlr()
             end do ! Age loop
         end do ! Met loop
 

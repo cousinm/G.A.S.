@@ -32,7 +32,8 @@ module ssp_mod
         procedure    :: create => ssp_create      ! Create/Init a ssp
         procedure    :: copy => ssp_copy          ! Copy a spp
         procedure    :: setAsRef => ssp_setAsRef  ! Set pointer to reference
-        procedure    :: mlr => ssp_mlr            ! Return the current sn ejecta rate
+        procedure    :: mlr => ssp_mlr            ! Return the insta,taneous SN ejecta rate
+        procedure    :: snp => ssp_snp            ! Return the instantaneous SN power
         procedure    :: transfer => ssp_transfer  ! Return the transfer rate from a age bin to the next age bin
         procedure    :: ststatus => ssp_ststatus  ! Get the current status of the ssp
         procedure    :: stevolve => ssp_stevolve  ! Apply a integrator scheme step
@@ -44,7 +45,7 @@ module ssp_mod
     !
     ! Define specific constants
     real(kind=rkd), parameter   :: Esn = 1.d51 * 1.e-7 * Energy_CU ! From erg to J to CU
-    real(kind=rkd), parameter   :: ssp_mass_accuracy = real(1.d-15, kind=rkd)
+    real(kind=rkd), parameter   :: ssp_mass_accuracy = real(1.d-19, kind=rkd)
     !
     ! Define ssp specific parameters
     integer(kind=ikd)           :: nAgeBins            ! Number of stellar age bins
@@ -60,7 +61,10 @@ module ssp_mod
     real(kind=rkd), allocatable :: spSED(:, :, :)      ! SSP SED
 
     type(gas), allocatable      :: MLR(:, :)           ! Gas ejection rates according to age and metlicity
-    type(status), target        :: mySspStatus         ! The current ssp status
+    
+    ! STATUS
+    type(status), target        :: sspStatus           ! The current status
+    type(status), target        :: sspFinalStatus      ! The final status
 
     ! INTERFACE OPERATOR DECLARATIONS
 
@@ -444,29 +448,35 @@ contains
         type(ssp), target             :: aSsp       ! a ssp matching the current state
         type(ssp), pointer            :: pSsp       ! Pointer to the current state
         
-        type(status), target          :: aStatus    ! Current status
-        type(status), pointer         :: pStatus    ! Pointer to the final status
+        type(status), pointer         :: pStatus       ! Pointer to the "current" status
+        type(status), pointer         :: pFinalStatus  ! Pointer to the "final" status
 
         class(ssp)                    :: this       ! The current ssp
 
         ! Init intermediate status with the current status
         aSsp = this
+        ! Pointer to status
+        pFinalStatus => sspFinalStatus
+        ! Pointer to current state
         pSsp => aSsp
         !
         ! Loop over integration steps
         do st = 1, nSolverStep
             !
             ! Get the current status of the ssp and update "final" status
-            pStatus => mySspStatus
-            aStatus = pSsp%ststatus(st, inRate, pStatus)
+            pStatus => sspStatus
+            call pSsp%ststatus(inRate, pStatus)
             !
-            if (.not. solver_isFinalStep(st)) then
-                ! Compute intermediate state according to current status
-                pStatus => aStatus
+            ! Update final status
+            call pFinalStatus%update(st, pStatus)
+            !
+            if (solver_isFinalStep(st)) then
+                ! Switch to final status
+                pStatus => sspFinalStatus
             end if
             !
             ! Adaptative time-step
-            dt = this%dtoptim(dt, pStatus)
+            dt = this%dtoptim(st, dt, pStatus)
             !
             ! Get new state
             call this%stevolve(st, dt, pStatus, pSsp)
@@ -475,6 +485,35 @@ contains
         this = aSsp
 
     end subroutine ssp_evolve
+
+    ! **********************************
+    subroutine ssp_ststatus(this, inRate, pStatus)
+
+        ! Compute current status of the ssp structure
+        ! according to :
+        ! - Internal evolution processes "trRate"
+        ! - A constant input rate (due to external process) "inRate"
+
+        implicit none
+
+        type(gas), intent(in)         :: inRate     ! The (dt-)constant input rate
+        type(gas)                     :: outRate    ! The output rate (ejecta)
+        type(gas)                     :: trRate     ! Internal transfer rate of the ssp
+
+        type(status)                  :: pStatus    ! Pointer to the "current" status
+
+        class(ssp)                    :: this       ! The current ssp
+
+        ! Internal transfer rate
+        trRate = this%transfer()
+        !
+        ! Ejecta rate
+        outRate = this%mlr()
+        !
+        ! Set status
+        call pStatus%set(inRate, trRate, outRate)
+
+    end subroutine ssp_ststatus
 
     ! **********************************
     subroutine ssp_stevolve(this, st, dt, pStatus, pSsp)
@@ -510,7 +549,7 @@ contains
 
         real(kind=rkd)              :: dt                ! The ssp is evolve during dt
         real(kind=rkd)              :: dmOut, dmIn, dmTr ! Output, input, and transfered masses
-        real(kind=rkd)              :: mass, final_mass
+        real(kind=rkd)              :: mass, finalMass, sspMass
 
         type(status), pointer       :: pStatus           ! The current ssp status (input and output rate)
 
@@ -518,10 +557,12 @@ contains
 
         class(ssp)                  :: this              ! The current ssp
 
+        ! Save current mass
+        sspMass = pSsp%mass
         ! Copy of the current state of the ssp
         pSsp = this
         !
-        ! Save initial mass
+        ! Save ref mass
         mass = this%mass
         ! Compute mass variation
         dmIn = dt * pStatus%in%mass
@@ -529,8 +570,10 @@ contains
         dmOut = dt * pStatus%out%mass
         !
         ! Test very low final mass (lead to numerical precision)
-        final_mass = mass - dmTr - dmOut + dmIn
-        if (abs(final_mass) > 0.d0 .and. abs(final_mass) < ssp_mass_accuracy) then
+        finalMass = mass - dmTr - dmOut + dmIn
+        if (mass > real(0.d0, kind=rkd) & 
+            .and. abs(finalMass) >= real(0.d0, kind=rkd) &
+            .and. abs(finalMass) < ssp_mass_accuracy) then
             ! The final will be too low,
             ! Reset the ssp, set pointer to reference and return
             call pSsp%create(this%iAge, this%jMet)
@@ -538,9 +581,9 @@ contains
             return
         end if
         !
-        ! From this point, mass is suffissp2cient
+        ! From this point, mass is sufficient
         ! Test mass evolution
-        if (final_mass < real(0.d0, kind=rkd)) then
+        if (finalMass < real(0.d0, kind=rkd)) then
             call log_message('Current evolution step leads to negative mass', &
                              logLevel=LOG_ERROR, calledBy='ssp_update')
         end if
@@ -548,9 +591,12 @@ contains
         ! Update the average age of the ssp
         ! Incoming mass is homogeneously received during dt
         ! its average age is therefore ageBin(i) + dt/2.
-        pSsp%avgAge = ((pSsp%avgAge + dt) * max(real(0.d0, kind=rkd), mass - dmOut - dmTr) &
-                        + dmIn * (ageBins(pSsp%iAge) + dt / real(2.d0, kind=rkd))) &
-                        / (mass - dmTr - dmOut + dmIn)
+        if (finalMass > real(0.d0, kind=rkd)) then
+            pSsp%avgAge = ((pSsp%avgAge + dt) * max(real(0.d0, kind=rkd), mass - dmOut - dmTr) &
+                            + dmIn * (ageBins(pSsp%iAge) + dt / real(2.d0, kind=rkd))) &
+                            / (mass - dmTr - dmOut + dmIn)
+            if (this%iAge < nAgeBins) pSsp%avgAge = min(pSsp%avgAge, ageBins(this%iAge + 1))
+        end if
         !
         ! Evolution
         pSsp%mass = pSsp%mass - dmTr - dmOut + dmIn
@@ -576,18 +622,31 @@ contains
         class(ssp)     :: this
 
         ! Compute wind/sn ejecta
+        ! call rate%create()
         rate = this%mass * MLR(this%iAge, this%jMet)
 
-        return
-
     end function ssp_mlr
+
+    ! **********************************
+    function ssp_snp(this) result(power)
+
+        ! Return the instantaneous SN disruption power
+
+        real(kind=rkd)  :: power     ! output rate
+
+        class(ssp)      :: this
+
+        ! Compute SN power
+        power = this%mass * SNR(this%iAge, this%jMet)*Esn   ! [CU]
+
+    end function ssp_snp
 
     ! **********************************
     function ssp_transfer(this) result(rate)
 
         ! Return the transfer rate from a bin to the next age bin
 
-        real(kind=rkd) :: t_tr
+        real(kind=rkd) :: t_tr, t_avg
         real(kind=rkd) :: vRate
 
         type(gas)      :: rate     ! Transfer rate
@@ -598,9 +657,10 @@ contains
         ! is higher than the next age bin
         vRate = real(0.d0, kind=rkd)
         if (this%iAge < nAgeBins) then
-            if (this%tform > ageBins(this%iAge + 1)) then
-                t_tr = ageBins(this%iAge + 1) - ageBins(this%iAge)
-                vRate = this%mass/t_tr
+            if (ageBins(this%iAge) + this%tform > ageBins(this%iAge + 1)) then
+                t_avg = (ageBins(this%iAge + 1) + ageBins(this%iAge)) / real(2.d0, kind=rkd)
+                t_tr = abs((ageBins(this%iAge + 1) - ageBins(this%iAge)) - real(2.d0, kind=rkd)*abs(this%avgAge - t_avg))
+                vRate = this%mass/max(t_tr, real(2./3., kind=rkd)*solver_dt)
             end if
         end if
         !
@@ -615,56 +675,23 @@ contains
     end function ssp_transfer
 
     ! **********************************
-    function ssp_ststatus(this, st, inRate, pStatus) result(aStatus)
-
-        ! Compute current status of the ssp structure
-        ! according to :
-        ! - Internal evolution processes "trRate"
-        ! - A constant input rate (due to external process) "inRate"
-
-        implicit none
-
-        integer(kind=ikd), intent(in) :: st
-
-        type(gas), intent(in)         :: inRate     ! The (dt-)constant input rate
-        type(gas)                     :: outRate    ! The output rate (ejecta)
-        type(gas)                     :: trRate     ! Internal transfer rate of the ssp
-
-        type(status)                  :: aStatus    ! Current status
-        type(status), pointer         :: pStatus    ! Pointer to the "final" status
-
-        class(ssp)                    :: this       ! The current ssp
-
-        ! Internal transfer rate
-        trRate = this%transfer()
-        !
-        ! Ejecta rate
-        outRate = this%mlr()
-        !
-        ! Set status
-        call aStatus%set(inRate, trRate, outRate)
-        !
-        ! Update final status
-        call pStatus%update(st, aStatus)
-
-    end function ssp_ststatus
-
-    ! **********************************
-    function ssp_dtoptim(this, dt, pStatus) result(adt)
+    function ssp_dtoptim(this, st, dt, pStatus) result(adt)
 
         ! Return the optimal time-step accoring to current status
         ! and mass
 
         implicit none
 
-        real(kind=rkd), intent(in) :: dt       ! time-step
-        real(kind=rkd)             :: adt
+        integer(kind=ikd), intent(in) :: st
 
-        type(status), pointer      :: pStatus  ! Pointer to the current status
+        real(kind=rkd), intent(in)    :: dt       ! time-step
+        real(kind=rkd)                :: adt
 
-        class(ssp)                 :: this     ! The current state
+        type(status), pointer         :: pStatus  ! Pointer to the current status
 
-        adt = pStatus%dtMax(dt, this%mass)
+        class(ssp)                    :: this     ! The current state
+
+        adt = pStatus%dtMax(st, dt, this%mass)
 
     end function ssp_dtoptim
 

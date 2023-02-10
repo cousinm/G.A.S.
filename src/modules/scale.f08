@@ -49,9 +49,11 @@ module scale_mod
     end type scale
     !
     ! Define scale specific parameters
-    real(kind=rkd), parameter :: scale_mass_accuracy = real(1.d-15, kind=rkd)
+    real(kind=rkd), parameter :: scale_mass_accuracy = real(1.d-20, kind=rkd)
 
-    type(status), target      :: myScaleStatus   ! The current
+    ! STATUS
+    type(status), target      :: sclStatus        ! The current status
+    type(status), target      :: sclFinalStatus   ! The final status
 
     ! INTERFACE OPERATOR DECLARATIONS
 
@@ -85,7 +87,7 @@ contains
         !
         ! The slope index of the velocity dispersion scalling relation is deduced from
         ! energy transfert conservation
-        sigma_slope = 1./3.*(2.0 - mu_slope)
+        sigma_slope = real(1./3., kind=rkd)*(2.0 - mu_slope)
         !
         ! Compute the energy transfert rate per unit of volume
         ETRV = muStar*sigmaStar**3./lStar**2.
@@ -231,40 +233,48 @@ contains
 
         implicit none
 
-        integer(kind=ikd)              :: st         ! Step index of evolution scheme
-        real(kind=rkd), intent(inout)  :: dt         ! The scale is evolve during dt
+        integer(kind=ikd)              :: st                ! Step index of evolution scheme
 
-        type(gas), intent(in)          :: inRate     ! The (dt-)constant input rate
-        type(gas), intent(in)          :: outRate    ! The (dt-)constant output rate
+        logical                        :: hasBeenCorrected  ! False is status has been corrected
+                                                            ! Only use for gsh status computation
+        real(kind=rkd), intent(inout)  :: dt                ! The scale is evolve during dt
 
-        type(scale), target            :: aScl       ! The current intermediate evolved scale
-        type(scale), pointer           :: pScl       ! pointer to the intermediate state
+        type(gas), intent(in)          :: inRate            ! The (dt-)constant input rate
+        type(gas), intent(in)          :: outRate           ! The (dt-)constant output rate
 
-        type(status), pointer          :: pStatus    ! Pointer to the corrected status
-        type(status), target           :: aStatus    ! Current status of the scale
+        type(scale), target            :: aScl              ! The current intermediate evolved scale
+        type(scale), pointer           :: pScl              ! pointer to the intermediate state
 
-        class(scale), target           :: this       ! The current scale
+        type(status), pointer          :: pFinalStatus      ! Pointer to the final status
+        type(status), pointer          :: pStatus           ! Pointer to the current status
+
+        class(scale), target           :: this              ! The current scale
 
         ! Init the first intermediate status to the current status
         aScl = this
         ! Set "this" a the reference
         call aScl%setAsRef(this)
-        ! Point to th eintermediate state
+        ! Pointer to current state
         pScl => aScl
+        ! Pointer to status
+        pFinalStatus => sclFinalStatus
         ! Loop over integration steps
         do st = 1, nSolverStep
             !
-            ! Get the current status of the scale and update "final" status
-            pStatus => myScaleStatus
-            aStatus = aScl%ststatus(st, inRate, outRate, pStatus)
+            ! Get the current status of the scale
+            pStatus => sclStatus
+            hasBeenCorrected = aScl%ststatus(inRate, outRate, pStatus)
             !
-            if (.not. solver_isFinalStep(st)) then
-                ! Compute intermediate state according to current status
-                pStatus => aStatus
+            ! Update final status
+            call pFinalStatus%update(st, pStatus)
+            !
+            if (solver_isFinalStep(st)) then
+                ! Switch to the final status
+                pStatus => pFinalStatus
             end if
             !
             ! Adaptative time-step
-            dt = this%dtoptim(dt, pStatus)
+            dt = this%dtoptim(st, dt, pStatus)
             !
             ! Get new state
             call this%stevolve(st, dt, pStatus, pScl)
@@ -314,7 +324,7 @@ contains
 
         real(kind=rkd), intent(in)   :: dt      ! The scale is evolve during dt
         real(kind=rkd)               :: dmOut, dmIn, dmTr ! Output, input, and transfered masses
-        real(kind=rkd)               :: mass, final_mass
+        real(kind=rkd)               :: mass, finalMass
 
         type(scale), pointer         :: pScl    ! Pointer to the intermediate state
 
@@ -333,8 +343,8 @@ contains
         dmOut = dt * pStatus%out%mass
         !
         ! Test very low final mass (lead to numerical precision)
-        final_mass = mass - dmTr - dmOut + dmIn
-        if (abs(final_mass) >= 0.d0 .and. abs(final_mass) < scale_mass_accuracy) then
+        finalMass = mass - dmTr - dmOut + dmIn
+        if (abs(finalMass) >= 0.d0 .and. abs(finalMass) < scale_mass_accuracy) then
             ! The final will be too low,
             ! Reset the scale, associated with its reference and return
             call pScl%create(this%l)
@@ -344,7 +354,7 @@ contains
         !
         ! From this point, mass is sufficient
         ! Test mass evolution
-        if (final_mass < real(0.d0, kind=rkd)) then
+        if (finalMass < real(0.d0, kind=rkd)) then
             call log_message('Current evolution step leads to negative mass', &
                             logLevel=LOG_ERROR, calledBy='scale_update')
         end if
@@ -393,7 +403,7 @@ contains
 
         class(scale)    :: this
 
-        M_BE = 3.d0/2.d0 * sigmaStar**4./GCst_CU**2./muStar*(this%l/lStar)**(4.*sigma_slope - mu_slope)
+        M_BE = real(3./2., kind=rkd) * sigmaStar**4./GCst_CU**2./muStar*(this%l/lStar)**(4.*sigma_slope - mu_slope)
     
     end function scale_get_BE_mass
 
@@ -406,7 +416,7 @@ contains
 
         class(scale)   :: this
 
-        V = 4./3.*pi*(this%l/2.d0)**3.
+        V = real(4./3., kind=rkd) * pi * (this%l/real(2., kind=rkd))**3.
 
     end function scale_volume
 
@@ -451,6 +461,7 @@ contains
 
         ! Transfer mass to the lower scale is only possible
         ! if the current scale is unstable (this%nClouds() > 0)
+        ! If the ref value is null, no transfert
         vRate = real(3.d0/2.d0, kind=rkd) * ETRV * this%volume() / this%sV()**2. * this%nClouds()
         !
         ! The transfer rate gas object is build according to the gas signature
@@ -459,7 +470,7 @@ contains
     end function scale_transfer
 
     ! **********************************
-    function scale_ststatus(this, st, inRate, outRate, pStatus) result(aStatus)
+    function scale_ststatus(this, inRate, outRate, pStatus) result(isOK)
 
         ! Compute current status of the scale structure
         ! according to :
@@ -469,20 +480,19 @@ contains
 
         implicit none
 
-        integer(kind=ikd), intent(in) :: st
+        logical                       :: isOK
 
-        real(kind=rkd)                :: refMass
-        real(kind=rkd)                :: wTr, wTot
+        type(gas), intent(in)         :: inRate       ! The (dt-)constant input rate
+        type(gas), intent(in)         :: outRate      ! The (dt-)constant output rate
+        type(gas)                     :: trRate       ! Internal transfer rate of the scale
+        type(gas)                     :: corrOutRate  ! Corrected output rate (if needed)
 
-        type(gas), intent(in)         :: inRate      ! The (dt-)constant input rate
-        type(gas), intent(in)         :: outRate     ! The (dt-)constant output rate
-        type(gas)                     :: trRate      ! Internal transfer rate of the scale
-        type(gas)                     :: corrOutRate ! Corrected output rate (if needed)
+        type(status), pointer         :: pStatus      ! Pointer to the "current" status
 
-        type(status)                  :: aStatus     ! Current status
-        type(status), pointer         :: pStatus     ! Pointer to the "final" status
+        class(scale)                  :: this         ! The current scale
 
-        class(scale)                  :: this        ! The current scale
+        ! Init
+        isOK = .True.
 
         ! Internal transfer rate
         trRate = this%transfer()
@@ -495,25 +505,20 @@ contains
             call log_message('pScl pointer not associated ! ', logLevel=LOG_ERROR)
             return
         end if
-        refMass = this%pScl%gas%mass
-        if (refMass == 0.d0) then
+        if (this%pScl%gas%mass == 0.d0) then
             ! Reference mass is null
             if (outRate%mass + trRate%mass > inRate%mass) then
-                ! External and internal processes lead to masss depletion
-                ! Set trRate + outRate = inRate to ensure no mass variation and keep mass = 0.
-                !
-                wTot = outRate%mass + trRate%mass
-                wTr = trRate%mass / wTot
-                trRate = wTr * inRate%mass * this%transfer()
-                corrOutRate = (real(1.d0, kind=rkd) - wTr) * inRate%mass * outRate%signature()
+                ! For this state,
+                ! external and internal processes lead to mass depletion
+                ! Set trRate = 0 and outRate = inRate to ensure no mass variation and keep mass = 0.
+                call trRate%create()  ! no transfer
+                corrOutRate = inRate  ! out = in
+                isOK = .False.
             end if
         end if
         !
         ! Set status
-        call aStatus%set(inRate, trRate, corrOutRate)
-        !
-        ! Update final status
-        call pStatus%update(st, aStatus)
+        call pStatus%set(inRate, trRate, corrOutRate)
         !
         ! Delete tmp objects
         call corrOutRate%delete()
@@ -521,21 +526,23 @@ contains
     end function scale_ststatus
 
     ! **********************************
-    function scale_dtoptim(this, dt, pStatus) result(adt)
+    function scale_dtoptim(this, st, dt, pStatus) result(adt)
 
         ! Return the optimal time-step accoring to current status
         ! and mass
 
         implicit none
 
-        real(kind=rkd), intent(in) :: dt       ! time-step
-        real(kind=rkd)             :: adt
+        integer(kind=ikd), intent(in) :: st
 
-        type(status), pointer      :: pStatus  ! Pointer to the current status
+        real(kind=rkd), intent(in)    :: dt       ! time-step
+        real(kind=rkd)                :: adt
 
-        class(scale)               :: this     ! The current state
+        type(status), pointer         :: pStatus  ! Pointer to the current status
 
-        adt = pStatus%dtMax(dt, this%gas%mass)
+        class(scale)                  :: this     ! The current state
+
+        adt = pStatus%dtMax(st, dt, this%gas%mass)
 
     end function scale_dtoptim
 

@@ -32,20 +32,20 @@ contains
 
         integer(kind=ikd), parameter :: u = 333       ! file unit
 
-        logical                    :: isValid
+        logical                      :: isValid
 
-        character(MAXPATHSIZE)     :: filename
+        character(MAXPATHSIZE)       :: filename
 
-        real(kind=rkd)             :: tstart, tend
+        real(kind=rkd)               :: tstart, tend
 
         ! Open log file for these tests
         write(filename,'(a, a)') trim(validPath), '/scale_tests.log'
         open(unit=u, file=filename, status='new')
 
-        !call cpu_time(tstart)
-        !isValid = test_scale_constant_injection()
-        !call cpu_time(tend)
-        !write(u, '(a,f7.3,a,l)') 'test_scale_constant_injection (', tend-tstart, ' sec): ', isValid
+        call cpu_time(tstart)
+        isValid = test_scale_constant_injection()
+        call cpu_time(tend)
+        write(u, '(a,f7.3,a,l)') 'test_scale_constant_injection (', tend-tstart, ' sec): ', isValid
 
         call cpu_time(tstart)
         isValid = test_scale_constant_injection_void_and_refill()
@@ -73,10 +73,10 @@ contains
 
         character(MAXPATHSIZE)       :: filename
 
-        real(kind=rkd), parameter    :: l = 1.d2*pc2kpc  ! [pc] Injection scale
-        real(kind=rkd), parameter    :: dt = 1.d-4       ! CU [Gyr]
+        real(kind=rkd), parameter    :: l = real(100., kind=rkd)*pc2kpc  ! [pc] Injection scale
+        real(kind=rkd), parameter    :: dt = real(1.d-4 , kind=rkd)      ! CU [Gyr]
         real(kind=rkd)               :: adt
-        real(kind=rkd), parameter    :: evolTime = 1.d0  ! CU [Gyr]
+        real(kind=rkd), parameter    :: evolTime = real(1. , kind=rkd)   ! CU [Gyr]
         real(kind=rkd)               :: t
         real(kind=rkd)               :: solution, diff
 
@@ -88,7 +88,7 @@ contains
 
         isValid = .TRUE.
 
-        inRate = 1.d-1 * MassRate_CU * initAbund(nMetBins)  ! 10Msun/yr in CU
+        inRate = real(10., kind=rkd) * MassRate_CU * initAbund(nMetBins)  ! 10Msun/yr in CU
         call outRate%create()  ! null
 
         ! Create a scale
@@ -104,10 +104,10 @@ contains
         t = 0.d0         ! init
         solution = 0.d0  ! init
         diff = 0.d0      ! init
-        write(u, '(a)') 't | nClouds | scl mass [CU] | gas mass [CU] | solution | diff'
+        write(u, '(a)') '# time | Scale mass | Gas mass | Solution | Error '
         do while (t < evolTime)
             !
-            write(u, *) t, scl%nClouds(), scl%gas%mass, ejGas%mass, solution, diff
+            write(u, *) t, scl%gas%mass, ejGas%mass, solution, diff
             !
             ! Compute evolution
             adt = dt
@@ -117,7 +117,7 @@ contains
             solution = solution + inRate%mass * adt
             !
             ! Update ejected gas reservoir
-            ejGas = ejGas + adt * (myScaleStatus%out + myScaleStatus%tr)
+            ejGas = ejGas + adt * (sclFinalStatus%out + sclFinalStatus%tr)
             !
             ! Test, mass conservation
             diff = abs(ejGas%mass + scl%gas%mass - solution)
@@ -147,10 +147,10 @@ contains
 
         character(MAXPATHSIZE)       :: filename
 
-        real(kind=rkd), parameter    :: l = 1.d1*pc2kpc  ! [pc] Injection scale
-        real(kind=rkd), parameter    :: dt = 1.d-4       ! CU [Gyr]
+        real(kind=rkd), parameter    :: l = real(10., kind=rkd)*pc2kpc  ! [pc] Injection scale
+        real(kind=rkd), parameter    :: dt = real(1.d-4 , kind=rkd)     ! CU [Gyr]
         real(kind=rkd)               :: adt
-        real(kind=rkd), parameter    :: evolTime = 1.d0  ! CU [Gyr]
+        real(kind=rkd), parameter    :: evolTime = 3.d0  ! CU [Gyr]
         real(kind=rkd)               :: t
         real(kind=rkd)               :: solution, diff
 
@@ -162,9 +162,8 @@ contains
 
         isValid = .TRUE.
 
-        inRate = 1.d-1 * MassRate_CU * initAbund(nMetBins)  ! 10Msun/yr in CU
+        inRate = real(10., kind=rkd) * MassRate_CU * initAbund(nMetBins)  ! 10 Msun/yr in CU
         call outRate%create()  ! null
-        !outRate = 2.d1 * MassRate_CU * initAbund(nMetBins)  ! 20Msun/yr in CU
 
         ! Create a scale
         call scl%create(l)
@@ -172,29 +171,32 @@ contains
         call ejGas%create()
 
         ! Open data file for this test
-        write(filename,'(a, a)') trim(validPath), '/test_scale_constant_injection_void_and_refill.dat'
+        write(filename,'(a, a)') trim(validPath), '/scale_test_constant_injection_void_and_refill.dat'
         open(unit=u, file=filename, status='new')
 
         ! Evolution
         t = 0.d0         ! init
         solution = 0.d0  ! init
         diff = 0.d0      ! init
-        write(u, '(a)') '# t | nClouds | scl mass [CU] | gas mass [CU] | solution | diff'
+        write(u, '(a)') '# time | Scale mass | Gas mass | Solution | Error'
         do while (t < evolTime)
             !
-            if (t > 0.3) then
+            if (t > 0.1) then
                 ! Output > Intput (that stay > 0.)
-                ! All input mass is directly ejected from the scale, mass should be kept to 0.
-                outRate = 2.d-1 * MassRate_CU * initAbund(nMetBins)  ! 20Msun/yr in CU
+                ! In this period, output rate is constant (not proportional to the mass reservoir)
+                ! The scale will be emptied and then
+                ! all input mass is directly ejected from the scale, mass should be kept to 0.
+                outRate = real(20., kind=rkd) * MassRate_CU * initAbund(nMetBins)  ! 20 Msun/yr in CU
             end if
             !
             if (t > 0.6) then
                 ! Output < Intput (> 0.)
                 ! Refill the scale
-                outRate = 5.d-2 * MassRate_CU * initAbund(nMetBins)   ! 5Msun/yr in CU
+                !call outRate%create()  ! null
+                outRate = real(5., kind=rkd) * MassRate_CU * initAbund(nMetBins)   ! 5 Msun/yr in CU
             end if
             !
-            write(u, *) t, scl%nClouds(), scl%gas%mass, ejGas%mass, solution, diff
+            write(u, *) t, scl%gas%mass, ejGas%mass, solution, diff
             !
             ! Compute evolution
             adt = dt
@@ -204,10 +206,10 @@ contains
             solution = solution + inRate%mass * adt
             !
             ! Update ejected gas reservoir
-            ejGas = ejGas + adt * (myScaleStatus%out + myScaleStatus%tr)
+            ejGas = ejGas + adt * (sclFinalStatus%out + sclFinalStatus%tr)
             !
             ! Test, mass conservation
-            diff = abs(ejGas%mass + scl%gas%mass - solution)
+            diff = ejGas%mass + scl%gas%mass - solution
             if (diff > num_accuracy) then
                 isValid = .FALSE.
             end if
