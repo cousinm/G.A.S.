@@ -10,16 +10,13 @@ module model_mod
     !*****************************************************************************************************************
 
     use parameters  ! Acces to global defintions and properties
+    use solver_mod  ! Acces to solver parameters and methods
     use config_mod  ! Acces to configurations parameters (path)
     use log_mod     ! Acces to logging procedures
 
     implicit none
 
     public
-
-    ! Define integration scheme
-    character(MAXPATHSIZE)   :: solver
-    integer(kind=ikd)        :: nSolverStep
     !
     ! Define scale specific parameters
     real(kind=rkd)    :: lStar           ! Star formation scale (~ 0.1pc)
@@ -30,11 +27,15 @@ module model_mod
     real(kind=rkd)    :: ETRV            ! Energy transfert rate per volume unit
     !
     ! Define gas structuration history parameters
-    integer(kind=ikd) :: nScales    ! Number of structuration scales
-    real(kind=rkd)    :: stepFactor ! Stepping factor of the gas structuration cascade
+    integer(kind=ikd) :: nScales         ! Number of structuration scales
+    real(kind=rkd)    :: stepFactor      ! Stepping factor of the gas structuration cascade
     !
     ! Define stellar population parameters
-    character(MAXPATHSIZE)  :: IMF   ! Initial Mass Function Reference
+    character(MAXPATHSIZE)  :: IMF       ! Initial Mass Function Reference
+    !
+    ! Define feedback parameters
+    real(kind=rkd)     :: gasDisruptionEfficiency  ! Gas disruption efficiency [0, 1]
+    real(kind=rkd)     :: Vwind                    ! Velocity of gas ejected from the gsh
 
 contains
 
@@ -93,15 +94,11 @@ contains
                 ! Integration Scheme
                 case ('solver')
                     read(val, '(a)') solver
-                    select case (trim(solver))
-                    case ('RK4')
-                        ! Range-Kutta 4th order
-                        nSolverStep = 4
-                    case default
-                        ! Range Kutte 2d order
-                        nSolverStep = 2
-                    end select
-                ! scale
+                    call solver_init(solver)
+                case ('dt_max', 'dt')
+                    read(val, *) solver_dt
+                !
+                ! Scale
                 case ('lStar')
                     read(val, *) lStar
                 case ('sigmaStar')
@@ -110,14 +107,24 @@ contains
                     read(val, *) muStar
                 case ('mu_slope')
                     read(val, *) mu_slope
-                ! gsh
+                !
+                ! Gsh
                 case ('nScales')
                     read(val, *) nScales
                 case ('stepFactor')
                     read(val, *) stepFactor
-                ! stellar populations
+                !
+                ! Stellar populations
                 case ('IMF')
                     read(val, '(a)') IMF
+                !
+                ! Feedback
+                case ('disrupt_eff', 'disrupt_efficiency')
+                    read(val, *) gasDisruptionEfficiency
+                case ('Vwind', 'vWind', 'VWind')
+                    read(val, *) Vwind
+                    ! conversion in code unit
+                    Vwind = Vwind * km_s2kpc_Gyr
                 case default
                     write(message, '(a,a,a)') 'Model parameter ', trim(name), ' is unknown'
                     call log_message(message, logLevel=LOG_ERROR)

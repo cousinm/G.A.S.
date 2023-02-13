@@ -2,18 +2,23 @@
 # COUSIN Morgane
 #
 # Integration scheme
-solver          = RK2       ! RK2 or RK4
+solver          = RK4          ! RK2 or RK4
+dt_max          = 0.0001
 #
 # Scale parameters
-lStar           = 0.1       ! Specific star formation scale [pc]
-sigmaStar       = 0.3       ! Specific gas 1D-velocity dispersion associated to the star formation scale [km/s]
-muStar          = 150.0     ! Specific gas surface density associated to the star formation scale [Msun/pc^2]
-mu_slope        = 0.2       ! slope index of the surface density scaling relation
+lStar           = 0.1          ! Specific star formation scale [pc]
+sigmaStar       = 0.3          ! Specific gas 1D-velocity dispersion associated to the star formation scale [km/s]
+muStar          = 150.0        ! Specific gas surface density associated to the star formation scale [Msun/pc^2]
+mu_slope        = 0.2          ! slope index of the surface density scaling relation
 #
 # Gas structuration history
-nScales         = 18        ! Number of traking scales
-stepFactor      = 2.0       ! Stepping factor
+nScales         = 18           ! Number of traking scales
+stepFactor      = 2.0          ! Stepping factor
 #
 # Stellar population
 IMF             = Chabrier+03  ! Initial Mass Function (Salpeter+55, Chabrier+03, Kroupa+93, Scalo+98)
+#
+# Feedback
+disrupt_eff     = 1.           ! SN gas disruption efficiency [0, 1]
+Vwind           = 200.0        ! [km/s]
 
