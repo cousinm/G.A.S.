@@ -97,8 +97,8 @@ dlLambda_dlT_max = ceil(dlLambda_dlT_max)
 # Cooling_efficiency
 filename = path.join(retreated_data_path, 'cooling_efficiency.in')
 # Header
-lTempBinsStr = ' '.join([f'{lt}' for lt in lTempBins])
-lMetBinsStr = ' '.join([f'{lz}' for lz in lMetBins])
+lTempBinsStr = ' '.join([f'{lt:.2f}' for lt in lTempBins])
+lMetBinsStr = ' '.join([f'{lz:.2f}' for lz in lMetBins])
 hdr = ('New G.A.S. format\n'
        'In this file, each line of the header is starting by #\n'
        '   data are saved after the keyword ----\n'
@@ -113,7 +113,7 @@ hdr = ('New G.A.S. format\n'
        'And for each following data line (i: Temp index): logLambda(i,1:nMetBins) in erg/s.cm^3\n'
        '----\n'
        f'{nlTemp} {nlMet}\n'
-       f'{dlTemp} {dlMet}\n'
+       f'{dlTemp:.2f} {dlMet:.2f}\n'
        f'{lTempBinsStr}\n'
        f'{lMetBinsStr}\n')
 # reformat data
@@ -174,7 +174,7 @@ hdr = ('New G.A.S. format\n'
        'And for each following data line (i: Temp index): 2. - dlnLambda/dlnT(i,1:nMetBins)\n'
        '----\n'
        f'{nlTemp} {nlMet}\n'
-       f'{dlTemp} {dlMet}\n'
+       f'{dlTemp:.2f} {dlMet:.2f}\n'
        f'{lTempBinsStr}\n'
        f'{lMetBinsStr}\n')
 # Reformat data
