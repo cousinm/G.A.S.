@@ -209,7 +209,7 @@ contains
         isValid = .TRUE.
 
         ! Init inRate
-        inRate = real(1.d1 * MassRate_CU, kind=rkd) * initAbund(3)  ! 10Msun/yr in CU
+        inRate = real(10., kind=rkd) * Msun_Yr2MassRateCU * initAbund(3)   ! 10Msun/yr in CU
 
         ! Create the stellar population
         call aSp%create()

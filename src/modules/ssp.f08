@@ -44,7 +44,7 @@ module ssp_mod
     end type ssp
     !
     ! Define specific constants
-    real(kind=rkd), parameter   :: Esn = 1.d51 * 1.e-7 * Energy_CU ! From erg to J to CU
+    real(kind=rkd), parameter   :: Esn = 1.d51 * erg2J * J2EnergCU ! From erg to J to CU
     real(kind=rkd), parameter   :: ssp_mass_accuracy = real(1.d-19, kind=rkd)
     !
     ! Define ssp specific parameters
@@ -177,8 +177,8 @@ contains
         character(MAXPATHSIZE)   :: line
     
         ! Build the input filename, according to the initial mass function (IMF)
-        write(filename,'(a,a,a,a)') trim(stellarPopPath), '/sp_MLR_[BC03]_', trim(IMF), '.in'
-        write(message,'(a,a)') 'Load data from: ', trim(filename)
+        write(filename,'(a, a, a, a)') trim(stellarPopPath), '/sp_MLR_[BC03]_', trim(IMF), '.in'
+        write(message,'(a, a)') 'Load data from: ', trim(filename)
         call log_message(message)
         !
         ! Open the file
@@ -319,7 +319,7 @@ contains
                 !
                 ! Convert in code unit
                 ! Initially SN rates are given [nb/Gyr] for a 1Msun SSP convert in Mass CU
-                SNR = SNR / MSun2mass
+                SNR = SNR / MSun2massCU
                 !
                 exit
             end if
@@ -400,7 +400,7 @@ contains
                 read(spsed_unit, *) ((lumBins(i, j), i=1, nAgeBins), j=1, nMetBins)  ! [Lsun] for a 1 Msun SSP
                 ! Convert in code unit
                 ! Initially luminosities are given for a 1 Msun SSP convert in Mass CU
-                LumBins = LumBins / MSun2mass
+                LumBins = LumBins / MSun2massCU
                 !
                 ! Skip the blank line
                 read(spsed_unit, *)

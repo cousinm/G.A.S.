@@ -73,8 +73,8 @@ contains
 
         character(MAXPATHSIZE)       :: filename
 
-        real(kind=rkd), parameter    :: l = real(100., kind=rkd)*pc2kpc  ! [pc] Injection scale
-        real(kind=rkd), parameter    :: dt = real(1.d-4 , kind=rkd)      ! CU [Gyr]
+        real(kind=rkd), parameter    :: l = real(100., kind=rkd)*pc2LenCU  ! [pc] Injection scale
+        real(kind=rkd), parameter    :: dt = real(1.d-4 , kind=rkd)        ! CU [Gyr]
         real(kind=rkd)               :: adt
         real(kind=rkd), parameter    :: evolTime = real(1. , kind=rkd)   ! CU [Gyr]
         real(kind=rkd)               :: t
@@ -88,7 +88,7 @@ contains
 
         isValid = .TRUE.
 
-        inRate = real(10., kind=rkd) * MassRate_CU * initAbund(nMetBins)  ! 10Msun/yr in CU
+        inRate = real(10., kind=rkd) * initAbund(nMetBins) * Msun_Yr2MassRateCU  ! 10Msun/yr in CU
         call outRate%create()  ! null
 
         ! Create a scale
@@ -147,8 +147,8 @@ contains
 
         character(MAXPATHSIZE)       :: filename
 
-        real(kind=rkd), parameter    :: l = real(10., kind=rkd)*pc2kpc  ! [pc] Injection scale
-        real(kind=rkd), parameter    :: dt = real(1.d-4 , kind=rkd)     ! CU [Gyr]
+        real(kind=rkd), parameter    :: l = real(10., kind=rkd)*pc2LenCU  ! [pc] Injection scale
+        real(kind=rkd), parameter    :: dt = real(1.d-4 , kind=rkd)       ! CU [Gyr]
         real(kind=rkd)               :: adt
         real(kind=rkd), parameter    :: evolTime = 3.d0  ! CU [Gyr]
         real(kind=rkd)               :: t
@@ -162,7 +162,7 @@ contains
 
         isValid = .TRUE.
 
-        inRate = real(10., kind=rkd) * MassRate_CU * initAbund(nMetBins)  ! 10 Msun/yr in CU
+        inRate = real(10., kind=rkd) * initAbund(nMetBins) * Msun_Yr2MassRateCU ! 10 Msun/yr in CU
         call outRate%create()  ! null
 
         ! Create a scale
@@ -186,14 +186,14 @@ contains
                 ! In this period, output rate is constant (not proportional to the mass reservoir)
                 ! The scale will be emptied and then
                 ! all input mass is directly ejected from the scale, mass should be kept to 0.
-                outRate = real(20., kind=rkd) * MassRate_CU * initAbund(nMetBins)  ! 20 Msun/yr in CU
+                outRate = real(20., kind=rkd) * initAbund(nMetBins) * Msun_Yr2MassRateCU  ! 20 Msun/yr in CU
             end if
             !
             if (t > 0.6) then
                 ! Output < Intput (> 0.)
                 ! Refill the scale
                 !call outRate%create()  ! null
-                outRate = real(5., kind=rkd) * MassRate_CU * initAbund(nMetBins)   ! 5 Msun/yr in CU
+                outRate = real(5., kind=rkd) * initAbund(nMetBins) * Msun_Yr2MassRateCU  ! 5 Msun/yr in CU
             end if
             !
             write(u, *) t, scl%gas%mass, ejGas%mass, solution, diff

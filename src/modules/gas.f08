@@ -102,8 +102,8 @@ contains
         character(MAXPATHSIZE)   :: line
         character(MAXPATHSIZE)   :: message
     
-        write(filename,'(a,a,a,a)') trim(librariesPath), '/gas_properties.in'
-        write(message,'(a,a,a,a)') 'Load data from: ', trim(filename)
+        write(filename,'(a, a)') trim(librariesPath), '/gas_properties.in'
+        write(message,'(a, a)') 'Load data from: ', trim(filename)
         call log_message(message)
         !
         ! Open the "gas properties" file
@@ -166,14 +166,14 @@ contains
 
         class(gas) :: this
         
-        this%mass = 0.  ! Total mass
-        this%mZ  = 0.   ! Metal mass
-        this%Eint = 0.  ! Internal energy
+        this%mass = 0.d0  ! Total mass
+        this%mZ  = 0.d0   ! Metal mass
+        this%Eint = 0.d0  ! Internal energy
 
         if (.not. allocated(this%elts)) then
             allocate(this%elts(nElts))  ! create
         end if
-        this%elts = 0.  ! Specific element mass
+        this%elts = 0.d0  ! Specific element mass
     
     end subroutine gas_create
 
@@ -354,25 +354,26 @@ contains
 
         implicit none
 
-        character(MAXPATHSIZE)           :: calledBy
+        character(MAXPATHSIZE)      :: calledBy
 
-        real(kind=rkd), intent(in)         :: T      ! The temperature [K]
-        real(kind=rkd)                     :: eint   ! Internal energy per particle
-        real(kind=rkd)                     :: mu     ! mean molecular mass
+        real(kind=rkd), intent(in)  :: T      ! The temperature [K]
+        real(kind=rkd)              :: eint   ! Internal energy per particle
+        real(kind=rkd)              :: mu     ! mean molecular mass
 
-        class(gas)                       :: this
+        class(gas)                  :: this
 
         write(calledBy, '(a)') 'setTemperature'
 
         ! The temperature allows to define the internal energy per particle
-        eint = 3.d0 / 2.d0 * kb * T  ! [Joule]
+        eint = real(3.d0/2.d0, kind=rkd) * kb * T  ! [Joule]
 
         ! Set the total internal energy according to the mass and 
         ! the mean molecular mass
 
         mu = this%molecular_mass()
-        this%Eint = eint * this%mass * Mass_kg / (mu * mp)  ! [Joule]
-        this%Eint = this%Eint * Energy_CU                   ! [CU]
+        this%Eint = eint * this%mass * MassCU2kg / (mu * mp)  ! [Joule]
+        this%Eint = this%Eint * J2EnergCU                     ! [CU]
+
     end subroutine setTemperature
 
     !
@@ -452,7 +453,7 @@ contains
 
         if (this%mass > 0.d0) then
             ! Compute gas signature
-            g = 1.d0/this%mass * this
+            g = real(1.d0, kind=rkd) / this%mass * this
         else
             g = this
         end if
@@ -467,11 +468,11 @@ contains
 
         implicit none
 
-        integer(kind=ikd)          :: e
+        integer(kind=ikd)        :: e
 
         character(len=*)         :: component
 
-        real(kind=rkd)             :: X
+        real(kind=rkd)           :: X
 
         class(gas), intent(in)   :: this
 
@@ -492,7 +493,7 @@ contains
                                           'this%mass                ', &
                                           'this%mZ                  ', &
                                           'this%Eint                '/), &
-                             realParams=(/X,this%mass,this%mZ,this%Eint/), &
+                             realParams=(/X, this%mass, this%mZ, this%Eint/), &
                              calledBy='gas%abundance()')  
         end if
 
@@ -522,7 +523,7 @@ contains
                                           'this%mass                ', &
                                           'this%mZ                  ', &
                                           'this%Eint                '/), &
-                             realParams=(/mu,this%mass,this%mZ,this%Eint/), &
+                             realParams=(/mu, this%mass, this%mZ, this%Eint/), &
                              calledBy='gas%molecular_mass')
         end if
 
@@ -535,15 +536,15 @@ contains
 
         implicit none
 
-        real(kind=rkd)             :: T, N, mu
+        real(kind=rkd)           :: T, N, mu
 
         class(gas), intent(in)   :: this
 
         ! Temperature is based on internal energy by particle
         mu = this%molecular_mass()
-        N = this%mass * Mass_kg / (mu*mp)
+        N = this%mass * MassCU2kg / (mu * mp)
 
-        T = 2.d0*this%Eint*Energy_J / (3.d0*kb*N)  ! [K]
+        T = real(2.d0/3.d0, kind=rkd) * this%Eint * EnergCU2J / (kb * N)  ! [K]
 
         if (T <= 0.) then
             call log_message('Temperature is not valid', &
@@ -552,7 +553,7 @@ contains
                                           'this%mass                ', &
                                           'this%mZ                  ', &
                                           'this%Eint                '/), &
-                             realParams=(/T,this%mass,this%mZ,this%Eint/), &
+                             realParams=(/T, this%mass, this%mZ, this%Eint/), &
                              calledBy='gas%temperature')
         end if
 

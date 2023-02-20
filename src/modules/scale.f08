@@ -79,11 +79,11 @@ contains
 
         ! Unit conversion
         ! Initialy lStar is given in pc
-        lStar = lStar*pc2kpc
+        lStar = lStar * pc2LenCU
         ! Initialy muStar is given in Msun/pc^2
-        muStar = muStar*MSun2mass/pc2kpc**2.
+        muStar = muStar * MSun2MassCU / pc2LenCU**2.
         ! Initialy sigmaStar is given in km/sec
-        sigmaStar = sigmaStar*km2kpc/s2Gyr
+        sigmaStar = sigmaStar * km2LenCU / s2TimeCU
         !
         ! The slope index of the velocity dispersion scalling relation is deduced from
         ! energy transfert conservation

@@ -124,7 +124,7 @@ contains
                 case ('Vwind', 'vWind', 'VWind')
                     read(val, *) Vwind
                     ! conversion in code unit
-                    Vwind = Vwind * km_s2kpc_Gyr
+                    Vwind = Vwind * km_s2VelCU
                 case default
                     write(message, '(a,a,a)') 'Model parameter ', trim(name), ' is unknown'
                     call log_message(message, logLevel=LOG_ERROR)

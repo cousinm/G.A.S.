@@ -165,7 +165,7 @@ contains
 
         isValid = .TRUE.
 
-        inRate = 1.d1 * MassRate_CU * initAbund(nMetBins)  ! 10Msun/yr in CU
+        inRate = 1.d1 * initAbund(nMetBins) * Msun_Yr2MassRateCU  ! 10 Msun/yr in CU
 
         ! Create a ssp
         call aSsp%create(iAge, nMetBins)
