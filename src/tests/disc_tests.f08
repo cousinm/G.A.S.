@@ -99,7 +99,7 @@ module disc_test_mod
 
         character(MAXPATHSIZE)       :: filename
 
-        real(kind=rkd), parameter    :: l = real(1.d2, kind=rkd)*pc2kpc  ! [pc] Injection scale
+        real(kind=rkd), parameter    :: l = real(1.d2, kind=rkd)*pc2LenCU  ! [pc] Injection scale
         real(kind=rkd), parameter    :: dt = real(1.d-4, kind=rkd)       ! CU [Gyr]
         real(kind=rkd)               :: adt
         real(kind=rkd), parameter    :: evolTime = real(1.d0, kind=rkd)  ! CU [Gyr]
@@ -114,7 +114,7 @@ module disc_test_mod
         isValid = .TRUE.
 
         ! Create input rate
-        inRate = real(1.d1, kind=rkd) * MassRate_CU * initAbund(4)  ! 10Msun/yr in CU
+        inRate = real(10., kind=rkd) * initAbund(4) * Msun_Yr2MassRateCU ! 10Msun/yr in CU
 
         ! Create a disc
         call aDisc%create()

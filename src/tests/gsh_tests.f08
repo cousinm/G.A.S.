@@ -130,7 +130,7 @@ contains
             return
         end if
 
-        li = real(1.d2, kind=rkd)*pc2kpc
+        li = real(1.d2, kind=rkd)*pc2LenCU
         il = gsh_l2i(li)
         li_test = gsh_i2l(il)
         if (il < nScales .and. li_test < li)  then
@@ -153,7 +153,7 @@ contains
 
         character(MAXPATHSIZE)       :: filename
 
-        real(kind=rkd), parameter    :: l = real(1.d2, kind=rkd)*pc2kpc  ! [pc] Injection scale
+        real(kind=rkd), parameter    :: l = real(1.d2, kind=rkd)*pc2LenCU  ! [pc] Injection scale
         real(kind=rkd), parameter    :: dt = real(1.d-4, kind=rkd)       ! CU [Gyr]
         real(kind=rkd), parameter    :: evolTime = real(2.d0, kind=rkd)  ! CU [Gyr]
         real(kind=rkd), parameter    :: Q = real(0.d0, kind=rkd)         ! Gas injection power (here = 0.)
@@ -169,7 +169,7 @@ contains
         isValid = .TRUE.
 
         ! Create input rate
-        inRate = real(1.d1, kind=rkd) * MassRate_CU * initAbund(nMetBins)  ! 10Msun/yr in CU
+        inRate = real(1.d1, kind=rkd) * initAbund(nMetBins) * Msun_Yr2MassRateCU   ! 10Msun/yr in CU
 
         ! Create a gas structuration history
         call aGsh%create()
@@ -200,7 +200,7 @@ contains
             !
             ! Save each scale in a dedicated file
             do s = 1, nScales
-                write(u+s, *) t, aGsh%mass, aGsh%ih, aGsh%Vesc()*Velocity_km_s, aGsh%cascade(s)%nClouds(), aGsh%cascade(s)%gas%mass, ejGas%mass
+                write(u+s, *) t, aGsh%mass, aGsh%ih, aGsh%Vesc()*VelCU2km_s, aGsh%cascade(s)%nClouds(), aGsh%cascade(s)%gas%mass, ejGas%mass
             end do
             write(u, *) t, aGsh%mass, ejGas%mass, solution, diff
             !
