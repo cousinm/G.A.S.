@@ -46,6 +46,7 @@ clean:
 
 utils:
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)parameters.f08
+	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)tools.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)solver.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)PrDi.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(UTILSDIR)log.f08
@@ -54,6 +55,7 @@ utils:
 
 modules: 
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)gas.f08
+	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)cooling.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)status.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)scale.f08
 	$(FORT) $(FFLAGS) $(OPTIONS) -c $(MODULESDIR)gsh.f08
