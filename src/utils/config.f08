@@ -28,6 +28,8 @@ module config_mod
     integer(kind=ikd), parameter   :: snRate_unit = 114
     ! File unit for SSP SED input data file
     integer(kind=ikd), parameter   :: spsed_unit = 115
+    ! File uit for cooling input dat file
+    integer(kind=ikd), parameter   :: cooling_unit = 116
 
     ! Main directories path
     character(MAXPATHSIZE)       :: validPath
