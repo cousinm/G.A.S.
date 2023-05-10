@@ -58,14 +58,14 @@ class Writer():
         Save all halo ID/properties for each snaphot in a dedicated data-set
         """
         # Group of snaphots
-        snaphotsGrp = self.h5f.create_group("snapshots")
+        snapshotsGrp = self.h5f.create_group("snapshots")
         for snapshot, haloList in snapshots.items():
             # Create a sub-group for this specific snaphot
-            snaphotGrp = snaphotsGrp.create_group("snaphot_{:03d}".format(snapshot))
+            snapshotGrp = snapshotsGrp.create_group("snapshot_{:03d}".format(snapshot))
             for halo in haloList.values():
                 # Create a group for each halo and
                 id = halo['IDs']['me']
-                haloGrp = snaphotGrp.create_group("halo_{:05d}".format(id))
+                haloGrp = snapshotGrp.create_group("halo_{:05d}".format(id))
                 #
                 # In this specific group create a set of 3 data-set to store:
                 # - halos IDs
