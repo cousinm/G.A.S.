@@ -12,6 +12,7 @@ module ssp_tests_mod
     use config_mod ! Acces to configurations parameters (path)
     use ssp_mod    ! Acces to ssp properties and procedures
     use log_mod    ! Acces to logging procedures
+    use solver_mod ! Acces to solver parameters
 
     implicit none
 
@@ -47,10 +48,10 @@ contains
         call cpu_time(tend)
         write(u, '(a,f7.3,a,l)') 'test_ssp_instantaneous_burst (', tend-tstart, ' sec): ', isValid
 
-        call cpu_time(tstart)
-        isValid = test_ssp_constant_injection_and_stop()
-        call cpu_time(tend)
-        write(u, '(a,f7.3,a,l)') 'test_ssp_constant_injection_and_stop (', tend-tstart, ' sec): ', isValid
+        ! call cpu_time(tstart)
+        ! isValid = test_ssp_constant_injection_and_stop()
+        ! call cpu_time(tend)
+        ! write(u, '(a,f7.3,a,l)') 'test_ssp_constant_injection_and_stop (', tend-tstart, ' sec): ', isValid
 
         ! Close log file
         close(u)
@@ -68,15 +69,17 @@ contains
         implicit none
 
         integer(kind=ikd), parameter :: u = 334          ! file unit
-        integer(kind=ikd), parameter :: iAge = 30
+        integer(kind=ikd), parameter :: v = 335          ! file unit
+        integer(kind=ikd), parameter :: w = 336          ! file unit
+        integer(kind=ikd), parameter :: iAge = 65
+        integer(kind=ikd), parameter :: jMet = 3
 
         logical                      :: isValid
 
         character(MAXPATHSIZE)       :: filename
 
-        real(kind=rkd), parameter    :: dt = 1.d-4       ! CU [Gyr]
         real(kind=rkd)               :: adt
-        real(kind=rkd), parameter    :: evolTime = 1.d0  ! CU [Gyr]
+        real(kind=rkd), parameter    :: evolTime = 1.d1  ! CU [Gyr]
         real(kind=rkd), parameter    :: M = real(1.d-1, kind=rkd)   ! CU [10^11Msun]
         real(kind=rkd)               :: t
         real(kind=rkd)               :: solution, diff
@@ -90,30 +93,50 @@ contains
         isValid = .TRUE.
 
         ! Create a ssp
-        call aSsp%create(iAge, 3)
-        ! Add mass
-        aSsp%mass = M
+        call aSsp%create(iAge, jMet)
         ! Set inRate to null
         call inRate%create()
         ! Create gas reservoir
         call ejGas%create()
         call trGas%create()
 
-        ! Open data file for this test
-        write(filename,'(a, a)') trim(validPath), '/test_ssp_instantaneous_burst.dat'
+        ! Open data files for this test
+        write(filename,'(a, a)') trim(validPath), '/test_ssp_instantaneous_burst_mass_conservation.dat'
         open(unit=u, file=filename, status='new')
+        write(u, '(a)') '# time | Ssp mass | Ej gas mass | Tr gas mass | Solution | Error'
+        !
+        write(filename,'(a, a)') trim(validPath), '/test_ssp_instantaneous_burst_rates.dat'
+        open(unit=v, file=filename, status='new')
+        write(v, '(a)') '# time | In Rate | Tr Rate | Out Rate '
+        !
+        write(filename,'(a, a)') trim(validPath), '/test_ssp_instantaneous_burst_timescales.dat'
+        open(unit=w, file=filename, status='new')
+        write(w, '(a)') '# time | Age Bin | Next Age Bin  | Average Age | Formation Age'
+
 
         ! Evolution
-        t = 0.d0         ! init
+        t = 0.d0      ! init
         solution = M  ! init
-        diff = 0.d0      ! init
-        write(u, '(a)') '# time | Ssp mass | Ej gas mass | Tr gas mass | Solution | Error'
+        diff = 0.d0   ! init
+        
         do while (t < evolTime)
             !
             write(u, *) t, aSsp%mass, ejGas%mass, trGas%mass, solution, diff
+            write(v, *) t, sspFinalStatus%in%mass, sspFinalStatus%tr%mass, sspFinalStatus%out%mass
+            write(w, *) t, ageBins(iAge), ageBins(iAge + 1), aSsp%avgAge, aSsp%tform
+            !
+            adt = solver_dt
+            !
+            if (t < num_accuracy) then
+                ! Add mass in a very short event
+                adt = real(solver_dt / 10., kind=rkd)
+                inRate = M / adt * initAbund(jMet)
+            else
+                ! No new mass
+                call inRate%create()
+            end if
             !
             ! Compute evolution
-            adt = dt
             call aSsp%evolve(adt, inRate)
             !
             ! Update ejected gas reservoir
@@ -131,6 +154,8 @@ contains
 
         ! Close data file
         close(u)
+        close(v)
+        close(w)
 
         ! Delete structure
         call inRate%delete()
@@ -145,13 +170,13 @@ contains
         implicit none
 
         integer(kind=ikd), parameter :: u = 334          ! file unit
+
         integer(kind=ikd), parameter :: iAge = 30
 
         logical                      :: isValid
 
         character(MAXPATHSIZE)       :: filename
 
-        real(kind=rkd), parameter    :: dt = 1.d-4       ! CU [Gyr]
         real(kind=rkd)               :: adt
         real(kind=rkd), parameter    :: evolTime = 1.d0  ! CU [Gyr]
         real(kind=rkd)               :: t
@@ -174,7 +199,7 @@ contains
         call trGas%create()
 
         ! Open data file for this test
-        write(filename,'(a, a)') trim(validPath), '/ssp_test_constant_injection_and_stop.dat'
+        write(filename,'(a, a)') trim(validPath), '/ssp_test_constant_injection_and_stop_mass_conservation.dat'
         open(unit=u, file=filename, status='new')
 
         ! Evolution
@@ -191,7 +216,7 @@ contains
             write(u, *) t, aSsp%mass, ejGas%mass, trGas%mass, solution, diff
             !
             ! Compute evolution
-            adt = dt
+            adt = solver_dt
             call aSsp%evolve(adt, inRate)
             !
             ! Compute real solution

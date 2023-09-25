@@ -18,7 +18,7 @@ module parameters
 
     ! General parameters
     integer, parameter           :: ikd = selected_int_kind(6)
-    integer, parameter           :: rkd = selected_real_kind(12)
+    integer, parameter           :: rkd = selected_real_kind(15, 307)
     integer(kind=ikd), parameter :: MAXPATHSIZE        = 2048
     !
     ! Mathematical constants 

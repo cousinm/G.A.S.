@@ -100,9 +100,9 @@ module disc_test_mod
         character(MAXPATHSIZE)       :: filename
 
         real(kind=rkd), parameter    :: l = real(1.d2, kind=rkd)*pc2LenCU  ! [pc] Injection scale
-        real(kind=rkd), parameter    :: dt = real(1.d-4, kind=rkd)       ! CU [Gyr]
+        real(kind=rkd), parameter    :: dt = real(5.d-4, kind=rkd)         ! CU [Gyr]
         real(kind=rkd)               :: adt
-        real(kind=rkd), parameter    :: evolTime = real(1.d0, kind=rkd)  ! CU [Gyr]
+        real(kind=rkd), parameter    :: evolTime = real(1.d0, kind=rkd)   ! CU [Gyr]
         real(kind=rkd)               :: t
         real(kind=rkd)               :: solution, diff
 
@@ -114,7 +114,7 @@ module disc_test_mod
         isValid = .TRUE.
 
         ! Create input rate
-        inRate = real(10., kind=rkd) * initAbund(4) * Msun_Yr2MassRateCU ! 10Msun/yr in CU
+        inRate = real(1.d1, kind=rkd) * initAbund(4) * Msun_Yr2MassRateCU ! 10 Msun/yr in CU
 
         ! Create a disc
         call aDisc%create()
@@ -123,12 +123,12 @@ module disc_test_mod
 
         ! Open data files for this test
         ! Mass conservation data file
-        write(filename, '(a,a,i2.2,a)') trim(validPath), '/disc_test_constant_injection_and_stop.dat'
+        write(filename, '(a,a,i2.2,a)') trim(validPath), '/test_disc_constant_injection_and_stop_mass_conservation.dat'
         open(unit=u, file=filename, status='new')
         write(u, '(a)') '# time | Gas mass | Star mass | Ejected gas mass | Solution | Error'
         !
         ! Results file
-        write(filename, '(a,a,i2.2,a)') trim(validPath), '/disc_results_constant_injection_and_stop.dat'
+        write(filename, '(a,a,i2.2,a)') trim(validPath), '/test_disc_constant_injection_and_stop_rates.dat'
         open(unit=v, file=filename, status='new')
         write(v, '(a)') '# time | inRate | SFR | outRate | Solution | Error'
         !
@@ -138,7 +138,7 @@ module disc_test_mod
         diff = 0.d0      ! init
         do while (t < evolTime)
             !
-            if (t > 0.05) then
+            if (t > 5.d-1) then
                 call inRate%create()
             end if
             !

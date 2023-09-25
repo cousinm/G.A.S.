@@ -86,10 +86,20 @@ contains
         ! Init intermediate status
         if (.not. allocated(spStatus)) then
             allocate(spStatus(nAgeBins, nMetBins))
+            do i = 1, nAgeBins
+                do j = 1, nMetBins
+                    call spStatus(i, j)%create()
+                end do
+            end do
         end if
         ! Init final status
         if (.not. allocated(spFinalStatus)) then
             allocate(spFinalStatus(nAgeBins, nMetBins))
+            do i = 1, nAgeBins
+                do j = 1, nMetBins
+                    call spFinalStatus(i, j)%create()
+                end do
+            end do
         end if
 
         ! Build gas to stellar population conversion matrix
@@ -316,6 +326,10 @@ contains
         call outRate%create()
         ! Reset global status
         call this%myStatus%create()
+        ! Distribute gas input stellar metalicity bins
+        if (inRate%mass > 0.d0) then
+            inRateBins = g2s(inRate)
+        end if
         !
         ! Loop on metalicity bins
         do jMet = 1, nMetBins
@@ -332,8 +346,6 @@ contains
                 !
                 ! Input rate (SFR) is only applied to the youngest ssp
                 if (iAge == 1 .and. inRate%mass > 0.d0) then
-                    ! Distribute gas input stellar metalicity bins
-                    inRateBins = g2s(inRate)
                     sspInRate = sspInRate + inRateBins(jMet)
                 end if
                 !
@@ -342,6 +354,10 @@ contains
                 !
                 ! Update final status
                 call pSspFinalStatus%update(st, pSspStatus)
+                !
+                if (pSsp%mass <= 0.d0 .and. pSspStatus%tr%mass > 0.d0) then
+                    call log_message('transfert with null mass', logLevel=LOG_ERROR)
+                end if
                 !
                 ! The transfer rate of the current ssp become an input rate
                 ! for the next (older) age bin
@@ -393,10 +409,8 @@ contains
         ! Init
         ! Get current status
         this%myStatus = pSp%myStatus
-        ! And reset the new state to the current one (status is kept)
+        ! Reset the new state to the current one (status is kept)
         pSp = this
-        ! Total mass
-        mass = real(0.d0, kind=rkd)
         !
         ! Loop on metalicity bins
         do jMet = 1, nMetBins
@@ -411,6 +425,52 @@ contains
                     !
                     ! Apply the new solver step
                     call this%sfh(iAge, jMet)%stevolve(st, dt, pSspStatus, pSsp)
+                end if
+            end do ! Age loop
+        end do ! Met loop
+        !
+        ! Cleaning very low mass bin
+        if (solver_isFinalStep(st)) then
+            ! Loop on metalicity bins
+            do jMet = 1, nMetBins
+                ! Loop on age bins
+                do iAge = 1, nAgeBins - 1
+                    !
+                    ! Get pointers
+                    pSsp => pSp%sfh(iAge, jMet)
+                    !
+                    if (pSsp%mass > 0.d0 .and. pSsp%mass < ssp_mass_accuracy .and. &
+                        pSp%sfh(iAge + 1, jMet)%mass > ssp_mass_accuracy) then
+                        ! Transfert to next age bin
+                        pSp%sfh(iAge + 1, jMet)%mass = pSp%sfh(iAge + 1, jMet)%mass + pSsp%mass 
+                        ! Reset bin
+                        call pSsp%create(iAge, jMet)
+                        call pSsp%setAsRef(pSp%sfh(iAge, jMet))
+                    end if
+                    !
+                    if (pSsp%mass < 0.d0) then
+                        call log_message('negative ssp mass', LOG_ERROR, &
+                                 paramNames=(/'iAge                    ','jMet                    '/), &
+                                 intParams=(/iAge, jMet/))
+                    end if
+                end do ! Age loop
+            end do ! Met loop
+        end if
+        !
+        ! Compute properties 
+        mass = real(0.d0, kind=rkd)
+        mAge = real(0.d0, kind=rkd)
+        mZ = real(0.d0, kind=rkd)
+        !
+        ! Loop on metalicity bins
+        do jMet = 1, nMetBins
+            ! Loop on age bins
+            do iAge = 1, nAgeBins
+                !
+                pSsp => pSp%sfh(iAge, jMet)
+                !
+                ! Compute properties
+                if (pSsp%mass > 0.d0) then
                     !
                     ! Update total mass of the stellar population
                     mass = mass + pSsp%mass
@@ -476,12 +536,12 @@ contains
         allocate(B(nMetBins))
         allocate(gasBins(nMetBins))
         !
-        ! Set masses
+        ! Set normalized masses
         do i = 1, nMetBins
             if (i == 1) then
-                B(i) = g%mass
+                B(i) = 1.d0
             else
-                B(i) = g%elts(i-1)
+                B(i) = g%elts(i-1) / g%mass
             end if
         end do
         !
@@ -512,6 +572,7 @@ contains
         ! Normalisation
         mass = sum(B)
         B = g%mass/mass * B
+        mass = sum(B)
         !
         ! Convert in gas object
         do i = 1, nMetBins

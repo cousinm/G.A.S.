@@ -65,18 +65,46 @@ contains
 
         implicit none
 
+        integer(kind=ikd) :: i
+
         ! Init scale
         call scale_init()
 
         ! Init status
         if (.not. allocated(gshStatus)) then
             allocate(gshStatus(nScales))
+            do i = 1, nScales
+                call gshStatus(i)%create()
+            end do
         end if
         if (.not. allocated(gshFinalStatus)) then
             allocate(gshFinalStatus(nScales))
+            do i = 1, nScales
+                call gshFinalStatus(i)%create()
+            end do
         end if
 
     end subroutine gsh_init
+
+    ! **********************************
+    subroutine gsh_finalize()
+
+        ! Finalize the gsh module and dependancies
+
+        implicit none
+
+        integer(kind=ikd) :: i
+
+        ! Finalize tatus
+        if (allocated(gshStatus)) then
+            deallocate(gshStatus)
+        end if
+
+        if (allocated(gshFinalStatus)) then
+            deallocate(gshFinalStatus)
+        end if
+
+    end subroutine gsh_finalize
 
     ! **********************************
     subroutine gsh_create(this)
@@ -267,8 +295,6 @@ contains
         !
         ! Init sclInRate
         call sclInRate%create()
-        ! Init large scale output
-        call outRate%create()
         ! Reset global status
         call this%myStatus%create()
         !
@@ -307,6 +333,7 @@ contains
             ! Update scale status, take into account internal transfer rate
             ! In output indicates if a correction has been done on the status
             sclIsOK = pScl%ststatus(sclInRate, sclOutRate, pSclStatus)
+            !
             if (.not. sclIsOK .and. isOK) then
                 ! A correction has been done on this scl,
                 ! output and transfer status has been impacted
@@ -319,6 +346,8 @@ contains
         !
         ! Reset inRate
         call sclInRate%create()
+        ! Init large scale output
+        call outRate%create()
         !
         ! SECOND loop (corrector if need and set final status)
         do s = 1, nScales
@@ -353,15 +382,15 @@ contains
             call pFinalStatus(s)%update(st, pSclStatus)
             !
             ! Update large scale ejecta rate
-            if (s >= this%ih .and. pFinalStatus(s)%out%isCreated()) then
+            if (s >= this%ih) then
                 outRate = outRate + pFinalStatus(s)%out
             end if
         end do
         !
         ! Set the average input rate applied
-        ! Set the average transfert rate  at the lowest scale
+        ! Set the average transfert rate at the lowest scale
         ! Set the average large scale output applied
-        call this%myStatus%set(pFinalStatus(il)%in, pFinalStatus(1)%tr, outRate)
+        call this%myStatus%set(inRate, pFinalStatus(1)%tr, outRate)
         !
         ! Deallocate local structure
         deallocate(disruptRates)
@@ -396,12 +425,6 @@ contains
         class(gsh)                      :: this            ! The current gsh
 
         ! Init
-        ! Index of the one-cloud scale (or largest scale with mass)
-        ! This index is assumed to be constant for a complete solver step evaluation (st = 1, 2, 3, 4)
-        ! and it is therefore up to date only for the final step of the integration scheme
-        ih = -1
-        ! Total mass
-        mass = real(0.d0, kind=rkd)
         ! Get current status
         this%myStatus = pGsh%myStatus
         ! And reset the new state to the current one (status is kept)
@@ -418,6 +441,41 @@ contains
                 !
                 ! Apply the new solver step for the scale
                 call this%cascade(s)%stevolve(st, dt, pSclStatus, pScl)
+            end if
+        end do
+        !
+        ! Cleaning very low mass bin
+        if (solver_isFinalStep(st)) then
+            ! Loop on metalicity bins
+            do s = nScales, 2, -1
+                !
+                ! Get pointers
+                pScl => pGsh%cascade(s)
+                !
+                if (pScl%gas%mass > 0.d0 .and. pScl%gas%mass < scale_mass_accuracy .and. &
+                    pGsh%cascade(s - 1)%gas%mass > scale_mass_accuracy) then
+                    ! Transfert to the lower scale
+                    call pGsh%cascade(s - 1)%add(pScl%gas)
+                    ! Reset bin
+                    call pScl%create(pScl%l)
+                end if
+            end do
+        end if
+        !
+        ! Compute properties
+        ! Index of the one-cloud scale (or largest scale with mass)
+        ! This index is assumed to be constant for a complete solver step evaluation (st = 1, 2, 3, 4)
+        ! and it is therefore up to date only for the final step of the integration scheme
+        ih = -1
+        ! Total mass
+        mass = real(0.d0, kind=rkd)
+        !
+        do s = nScales, 1, -1
+            !
+            ! Get pointers
+            pScl => pGsh%cascade(s)
+            !
+            if (pScl%gas%mass > 0.d0) then
                 !
                 ! Update total cascade mass
                 mass = mass + pScl%gas%mass
@@ -427,7 +485,8 @@ contains
                     ih = s  ! Init to the first scale containing mass
                 end if
                 if (s < nScales) then
-                    if (pScl%nClouds() > 0 .and. this%cascade(s + 1)%nClouds() == 0) then
+                    if (pScl%nClouds() > real(0.d0, kind=rkd) .and. &
+                        this%cascade(s + 1)%nClouds() < real(1.d0, kind=rkd)) then
                         ! Set to the first scale with at least one Cloud
                         ih = s
                     end if

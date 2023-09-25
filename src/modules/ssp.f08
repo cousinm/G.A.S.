@@ -15,6 +15,7 @@ module ssp_mod
     use gas_mod     ! Acces to gas properties and procedures
     use status_mod  ! Acces to transfer rates status
     use config_mod  ! Acces to configurations parameters (path)
+    use solver_mod  ! Acces to solver properties
 
     implicit none
 
@@ -38,14 +39,13 @@ module ssp_mod
         procedure    :: ststatus => ssp_ststatus  ! Get the current status of the ssp
         procedure    :: stevolve => ssp_stevolve  ! Apply a integrator scheme step
         procedure    :: dtoptim => ssp_dtoptim    ! Get the optimal time-step
-        procedure    :: update => ssp_update      ! Update a ssp
         procedure    :: evolve => ssp_evolve      ! Evolve the scale, for dt 
                                                   ! according to internal/external input/output
     end type ssp
     !
     ! Define specific constants
     real(kind=rkd), parameter   :: Esn = 1.d51 * erg2J * J2EnergCU ! From erg to J to CU
-    real(kind=rkd), parameter   :: ssp_mass_accuracy = real(1.d-19, kind=rkd)
+    real(kind=rkd), parameter   :: ssp_mass_accuracy = real(1.d-17, kind=rkd)
     !
     ! Define ssp specific parameters
     integer(kind=ikd)           :: nAgeBins            ! Number of stellar age bins
@@ -525,7 +525,10 @@ contains
         integer(kind=ikd), intent(in)  :: st       ! Step index of evolution scheme
 
         real(kind=rkd), intent(in)     :: dt       ! Evolution time-step
+        real(kind=rkd)                 :: adt
         real(kind=rkd)                 :: wdt
+        real(kind=rkd)                 :: dmOut, dmIn, dmTr ! Output, input, and transfered masses
+        real(kind=rkd)                 :: mass, finalMass, sspMass
 
         type(ssp), pointer             :: pSsp     ! Pointer to the intermediate state
 
@@ -533,80 +536,59 @@ contains
 
         class(ssp)                     :: this     ! The current ssp
 
-        ! Compute new state
-        wdt = solver_wdt(st) 
-        call this%update(wdt * dt, pStatus, pSsp)
-
-    end subroutine ssp_stevolve
-
-    ! **********************************
-    subroutine ssp_update(this, dt, pStatus, pSsp)
-
-        ! Update "this" during dt to the next intermediate state (given by: pSsp) 
-        ! according to a current status "pStatus
-
-        implicit none
-
-        real(kind=rkd)              :: dt                ! The ssp is evolve during dt
-        real(kind=rkd)              :: dmOut, dmIn, dmTr ! Output, input, and transfered masses
-        real(kind=rkd)              :: mass, finalMass, sspMass
-
-        type(status), pointer       :: pStatus           ! The current ssp status (input and output rate)
-
-        type(ssp), pointer          :: pSsp              ! Pointer to the intermediate state
-
-        class(ssp)                  :: this              ! The current ssp
-
-        ! Save current mass
-        sspMass = pSsp%mass
-        ! Copy of the current state of the ssp
-        pSsp = this
-        !
-        ! Save ref mass
-        mass = this%mass
-        ! Compute mass variation
-        dmIn = dt * pStatus%in%mass
-        dmTr = dt * pStatus%tr%mass
-        dmOut = dt * pStatus%out%mass
-        !
-        ! Test very low final mass (lead to numerical precision)
-        finalMass = mass - dmTr - dmOut + dmIn
-        if (mass > real(0.d0, kind=rkd) & 
-            .and. abs(finalMass) >= real(0.d0, kind=rkd) &
-            .and. abs(finalMass) < ssp_mass_accuracy) then
-            ! The final will be too low,
-            ! Reset the ssp, set pointer to reference and return
-            call pSsp%create(this%iAge, this%jMet)
-            call pSsp%setAsRef(this)
-            return
-        end if
-        !
-        ! From this point, mass is sufficient
-        ! Test mass evolution
-        if (finalMass < real(0.d0, kind=rkd)) then
-            call log_message('Current evolution step leads to negative mass', &
-                             logLevel=LOG_ERROR, calledBy='ssp_update')
-        end if
-        !
-        ! Update the average age of the ssp
-        ! Incoming mass is homogeneously received during dt
-        ! its average age is therefore ageBin(i) + dt/2.
-        if (finalMass > real(0.d0, kind=rkd)) then
-            pSsp%avgAge = ((pSsp%avgAge + dt) * max(real(0.d0, kind=rkd), mass - dmOut - dmTr) &
-                            + dmIn * (ageBins(pSsp%iAge) + dt / real(2.d0, kind=rkd))) &
+        if (pSsp%mass > 0.d0 .or. pStatus%in%mass > 0.d0) then
+            !
+            ! Get step ponderation
+            wdt = solver_wdt(st)
+            adt = dt * wdt
+            !
+            ! Save current mass
+            sspMass = pSsp%mass
+            ! Copy of the current state of the ssp
+            pSsp = this
+            !
+            ! Save ref mass
+            mass = this%mass
+            ! Compute mass variation
+            dmIn = adt * pStatus%in%mass
+            dmTr = adt * pStatus%tr%mass
+            dmOut = adt * pStatus%out%mass
+            !
+            ! Test very low final mass (in link with numerical precision)
+            finalMass = mass - dmTr - dmOut + dmIn
+            if (solver_isFinalStep(st) .and. &                    ! In the last step od the integration scheme
+                dmTr > real(0.d0, kind=rkd) .and. &               ! with mass transfer
+                abs(finalMass) < 1.d-2 * ssp_mass_accuracy) then  ! too low
+                call pSsp%create(this%iAge, this%jMet)
+                call pSsp%setAsRef(this)
+                write(*,*) 'Reset: ', this%iAge, this%jMet, finalMass
+                return
+            end if
+            !
+            ! From this point, mass is sufficient
+            ! Test mass evolution
+            if (finalMass < real(0.d0, kind=rkd)) then
+                call log_message('Current evolution step leads to negative mass', &
+                                logLevel=LOG_ERROR, calledBy='ssp_stevolve')
+            end if
+            !
+            ! Update the average age of the ssp
+            ! Incoming mass is homogeneously received during dt
+            ! its average age is therefore ageBin(i) + dt/2.
+            !if (finalMass > real(0.d0, kind=rkd)) then
+            pSsp%avgAge = ((pSsp%avgAge + adt) * max(real(0.d0, kind=rkd), mass - dmOut - dmTr) &
+                            + dmIn * (ageBins(pSsp%iAge) + adt / real(2.d0, kind=rkd))) &
                             / (mass - dmTr - dmOut + dmIn)
             if (this%iAge < nAgeBins) pSsp%avgAge = min(pSsp%avgAge, ageBins(this%iAge + 1))
-        end if
-        !
-        ! Evolution
-        pSsp%mass = pSsp%mass - dmTr - dmOut + dmIn
-        !
-        ! Update formation time of this single stellar population
-        if (pSsp%mass > 0.d0) then
-            pSsp%tform = pSsp%tform + dt
+            !
+            ! Evolution
+            pSsp%mass = finalMass
+            !
+            ! Update formation time of this single stellar population
+            pSsp%tform = pSsp%tform + adt
         end if
 
-    end subroutine ssp_update
+    end subroutine ssp_stevolve
 
     !
     ! FUNCTIONS
@@ -622,7 +604,6 @@ contains
         class(ssp)     :: this
 
         ! Compute wind/sn ejecta
-        ! call rate%create()
         rate = this%mass * MLR(this%iAge, this%jMet)
 
     end function ssp_mlr
@@ -647,7 +628,7 @@ contains
         ! Return the transfer rate from a bin to the next age bin
 
         real(kind=rkd) :: t_tr, t_avg
-        real(kind=rkd) :: vRate
+        real(kind=rkd) :: vRate, mass
 
         type(gas)      :: rate     ! Transfer rate
 
@@ -656,11 +637,12 @@ contains
         ! A transfert is done if the formation time associated to the bin
         ! is higher than the next age bin
         vRate = real(0.d0, kind=rkd)
-        if (this%iAge < nAgeBins) then
+        mass = this%mass
+        if (this%mass > real(0.d0, kind=rkd) .and. this%iAge < nAgeBins) then
             if (ageBins(this%iAge) + this%tform > ageBins(this%iAge + 1)) then
                 t_avg = (ageBins(this%iAge + 1) + ageBins(this%iAge)) / real(2.d0, kind=rkd)
-                t_tr = abs((ageBins(this%iAge + 1) - ageBins(this%iAge)) - real(2.d0, kind=rkd)*abs(this%avgAge - t_avg))
-                vRate = this%mass/max(t_tr, real(2./3., kind=rkd)*solver_dt)
+                t_tr = abs((ageBins(this%iAge + 1) - ageBins(this%iAge)) - real(2.d0, kind=rkd) * abs(this%avgAge - t_avg))
+                vRate = this%mass/max(t_tr, real(1.d0/1.d2, kind=rkd)*solver_dt)
             end if
         end if
         !

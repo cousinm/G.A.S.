@@ -66,6 +66,13 @@ contains
 
         class(status)           :: this     ! The current status
 
+        ! Test negative mass
+        if (in%mass < 0.d0 .or. tr%mass < 0.d0 .or. out%mass < 0.d0) then
+            call log_message('negative mass status', LOG_ERROR, &
+                             paramNames=(/'in%mass                  ','tr%mass                  ','out%mass                 '/), &
+                             realParams=(/in%mass, tr%mass, out%mass/))
+        end if
+        ! Set
         call this%in%create()
         if (in%isCreated()) this%in = in        ! Set input rate
         call this%tr%create() 
@@ -160,6 +167,9 @@ contains
             if (dt_max >  wt * dt) then
                 dt_max = dt
             end if
+        end if
+        if (dt_max < 1.d-5 * solver_dt) then
+            write(*,*) 'Error, very small time-stepping !', dt
         end if
 
     end function status_dtmax

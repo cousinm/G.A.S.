@@ -11,6 +11,7 @@ module gsh_tests_mod
     use gsh_mod    ! Acces to gas structuration history module
     use config_mod ! Acces to configurations parameters (path)
     use log_mod    ! Acces to logging procedures
+    use solver_mod ! Acces to solver properties
 
     implicit none
 
@@ -154,27 +155,28 @@ contains
         character(MAXPATHSIZE)       :: filename
 
         real(kind=rkd), parameter    :: l = real(1.d2, kind=rkd)*pc2LenCU  ! [pc] Injection scale
-        real(kind=rkd), parameter    :: dt = real(1.d-4, kind=rkd)       ! CU [Gyr]
-        real(kind=rkd), parameter    :: evolTime = real(2.d0, kind=rkd)  ! CU [Gyr]
-        real(kind=rkd), parameter    :: Q = real(0.d0, kind=rkd)         ! Gas injection power (here = 0.)
+        real(kind=rkd), parameter    :: evolTime = real(1.d1, kind=rkd)    ! CU [Gyr]
+        real(kind=rkd), parameter    :: Q = real(0.d0, kind=rkd)           ! Gas injection power (here = 0.)
         real(kind=rkd)               :: t
         real(kind=rkd)               :: adt
         real(kind=rkd)               :: solution, diff
 
         type(gas)                    :: inRate  ! The constant injection rate at scale l
         type(gas)                    :: ejGas   ! Gas ejected from the gsh
+        type(gas)                    :: outGas  ! Gas availlable for star formation
 
         type(gsh)                    :: aGsh    ! gas structuration history
 
         isValid = .TRUE.
 
         ! Create input rate
-        inRate = real(1.d1, kind=rkd) * initAbund(nMetBins) * Msun_Yr2MassRateCU   ! 10Msun/yr in CU
+        inRate = real(5.d2, kind=rkd) * initAbund(nMetBins) * Msun_Yr2MassRateCU   ! 10Msun/yr in CU
 
         ! Create a gas structuration history
         call aGsh%create()
-        ! Create gas reservoir
+        ! Create gas reservoirs
         call ejGas%create()
+        call outGas%create()
 
         ! Open data files for this test
         ! Save each scale in a dedicated file
@@ -184,9 +186,9 @@ contains
             write(u+s, '(a)') '# time | mass | il | Vesc [km/s] | nClouds(s) | mass(s) | Ms '
         end do
         ! Create a other main test file for mass conservation test
-        write(filename, '(a,a)') trim(validPath), '/gsh_test_constant_injection_and_stop.dat'
+        write(filename, '(a,a)') trim(validPath), '/test_gsh_constant_injection_and_stop_mass_conservation.dat'
         open(unit=u, file=filename, status='new')
-        write(u, '(a)') '# time | Gsh mass | Ej gas mass | Solution | Error'
+        write(u, '(a)') '# time | Gsh mass | Ej gas mass | Tr gas mass | Solution | Error'
 
         ! Evolution
         t = 0.d0         ! init
@@ -194,28 +196,34 @@ contains
         diff = 0.d0      ! init
         do while (t < evolTime)
             !
-            if (t > 2.d-1) then
+            if (t > 1.d0) then
                 call inRate%create()
+            end if
+            if (t > 5.d0) then
+                inRate = real(5.d2, kind=rkd) * initAbund(nMetBins) * Msun_Yr2MassRateCU   ! 10Msun/yr in CU
             end if
             !
             ! Save each scale in a dedicated file
             do s = 1, nScales
                 write(u+s, *) t, aGsh%mass, aGsh%ih, aGsh%Vesc()*VelCU2km_s, aGsh%cascade(s)%nClouds(), aGsh%cascade(s)%gas%mass, ejGas%mass
             end do
-            write(u, *) t, aGsh%mass, ejGas%mass, solution, diff
+            write(u, *) t, aGsh%mass, ejGas%mass, outGas%mass, solution, diff
             !
             ! Compute evolution
-            adt = dt
+            adt = solver_dt
             call aGsh%evolve(adt, l, Q, inRate)
             !
             ! Compute real solution
-            solution = solution + inRate%mass * adt
+            solution = solution + inRate%mass * real(adt, kind=rkd)
             !
             ! Update ejected gas reservoir
-            ejGas = ejGas + adt * (aGsh%myStatus%tr + aGsh%myStatus%out)
+            call ejGas%add(adt * aGsh%myStatus%out)
+            !
+            ! Update gas availlable for star formation
+            call outGas%add(adt * aGsh%myStatus%tr)
             !
             ! Test, mass conservation
-            diff = ejGas%mass + aGsh%mass - solution
+            diff = ejGas%mass + outGas%mass + aGsh%mass - solution
             if (diff > num_accuracy) then
                 isValid = .FALSE.
             end if
@@ -232,6 +240,7 @@ contains
         call aGsh%delete()
         call inRate%delete()
         call ejGas%delete()
+        call outGas%delete()
 
     end function test_gsh_constant_injection_and_stop
 

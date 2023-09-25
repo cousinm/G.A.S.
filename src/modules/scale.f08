@@ -43,13 +43,12 @@ module scale_mod
         procedure   :: ststatus => scale_ststatus           ! Get the current status of the scale
         procedure   :: stevolve => scale_stevolve           ! Apply a integrator scheme step
         procedure   :: dtoptim => scale_dtoptim             ! Get the optimal time-step
-        procedure   :: update => scale_update               ! Update a scale
         procedure   :: evolve => scale_evolve               ! Evolve the scale, for dt 
                                                             ! according to internal/external input/output
     end type scale
     !
     ! Define scale specific parameters
-    real(kind=rkd), parameter :: scale_mass_accuracy = real(1.d-20, kind=rkd)
+    real(kind=rkd), parameter :: scale_mass_accuracy = real(1.d-17, kind=rkd)
 
     ! STATUS
     type(status), target      :: sclStatus        ! The current status
@@ -174,6 +173,7 @@ contains
         type(gas), intent(in)            :: g
 
         class(scale)                     :: this
+
         call this%gas%add(g)
 
     end subroutine
@@ -295,10 +295,15 @@ contains
 
         implicit none
  
-        integer(kind=ikd), intent(in) :: st       ! integartion scheme index
+        integer(kind=ikd), intent(in) :: st                ! Integartion scheme index
 
-        real(kind=rkd), intent(in)    :: dt       ! time-step
+        character(MAXPATHSIZE)        :: calledBy
+
+        real(kind=rkd), intent(in)    :: dt                ! time-step
         real(kind=rkd)                :: wdt
+        real(kind=rkd)                :: adt               ! The scale is evolve during dt
+        real(kind=rkd)                :: dmOut, dmIn, dmTr ! Output, input, and transfered masses
+        real(kind=rkd)                :: mass, finalMass
 
         type(status), pointer         :: pStatus  ! Pointer to the current status
 
@@ -308,43 +313,23 @@ contains
 
         ! Compute new state
         wdt = solver_wdt(st)
-        call this%update(wdt * dt, pStatus, pScl)
-
-    end subroutine scale_stevolve
-
-    ! **********************************
-    subroutine scale_update(this, dt, pStatus, pScl)
-
-        ! Update "this" during dt to the next intermediate state (given by: pScl) 
-        ! according to a current status "pStatus"
-
-        implicit none
-
-        character(MAXPATHSIZE)       :: calledBy
-
-        real(kind=rkd), intent(in)   :: dt      ! The scale is evolve during dt
-        real(kind=rkd)               :: dmOut, dmIn, dmTr ! Output, input, and transfered masses
-        real(kind=rkd)               :: mass, finalMass
-
-        type(scale), pointer         :: pScl    ! Pointer to the intermediate state
-
-        type(status), pointer        :: pStatus ! Pointer to the current status
-
-        class(scale), target         :: this    ! The current scale
-
+        adt = wdt * dt
+        !
         ! Copy of the current scale
         pScl = this
         !
         ! Save initial mass
         mass = this%gas%mass
         ! Compute mass variation
-        dmIn = dt * pStatus%in%mass
-        dmTr = dt * pStatus%tr%mass
-        dmOut = dt * pStatus%out%mass
+        dmIn = adt * pStatus%in%mass
+        dmTr = adt * pStatus%tr%mass
+        dmOut = adt * pStatus%out%mass
         !
         ! Test very low final mass (lead to numerical precision)
         finalMass = mass - dmTr - dmOut + dmIn
-        if (abs(finalMass) >= 0.d0 .and. abs(finalMass) < scale_mass_accuracy) then
+        if (solver_isFinalStep(st) .and. &                      ! In the last step od the integration scheme
+            (dmTr > real(0.d0, kind=rkd) .or. dmOut > real(0.d0, kind=rkd)) .and. &   ! with mass transfer
+            abs(finalMass) < 1.d-2 * scale_mass_accuracy) then  ! too low
             ! The final will be too low,
             ! Reset the scale, associated with its reference and return
             call pScl%create(this%l)
@@ -356,22 +341,22 @@ contains
         ! Test mass evolution
         if (finalMass < real(0.d0, kind=rkd)) then
             call log_message('Current evolution step leads to negative mass', &
-                            logLevel=LOG_ERROR, calledBy='scale_update')
+                            logLevel=LOG_ERROR, calledBy='scale_stevolve')
         end if
         !
         ! Evolution
         ! Add input mass
-        call pScl%add(dt * pStatus%in)
+        call pScl%add(adt * pStatus%in)
         ! Substract external output mass
-        call pScl%sub(dt * pStatus%out)
+        call pScl%sub(adt * pStatus%out)
         ! Substract transfered mass
-        call pScl%sub(dt * pStatus%tr)
+        call pScl%sub(adt * pStatus%tr)
         !
         ! Test the validity of the current scale
-        write(calledBy, '(a)') 'scale_update'
+        write(calledBy, '(a)') 'scale_stevolve'
         call pScl%isValid(calledBy)
 
-    end subroutine scale_update
+    end subroutine scale_stevolve
 
     !
     ! FUNCTIONS
@@ -386,9 +371,9 @@ contains
 
         real(kind=rkd) :: N
 
-        class(scale) :: this
+        class(scale)   :: this
 
-        N = floor(this%gas%mass/this%BE_mass())
+        N = real(floor(this%gas%mass/this%BE_mass(), kind=rkd), kind=rkd)
     
     end function scale_get_N_clouds
 
@@ -399,7 +384,7 @@ contains
 
         implicit none
 
-        real(kind=rkd)    :: M_BE
+        real(kind=rkd)  :: M_BE
 
         class(scale)    :: this
 
@@ -414,7 +399,7 @@ contains
 
         real(kind=rkd)   :: V
 
-        class(scale)   :: this
+        class(scale)     :: this
 
         V = real(4./3., kind=rkd) * pi * (this%l/real(2., kind=rkd))**3.
 
@@ -429,7 +414,7 @@ contains
 
         real(kind=rkd)    :: sV
 
-        class(scale)    :: this
+        class(scale)      :: this
 
         sV = sigmaStar * (this%l / lStar)**sigma_slope
 

@@ -57,6 +57,20 @@ contains
     end subroutine disc_init
 
     ! **********************************
+    subroutine disc_finalize()
+
+        ! Finalize the disc module and dependancies
+
+        implicit none
+
+        ! Finalize gas structuration history
+        call gsh_finalize()
+        ! Finalize stellar population
+        call sp_finalize()
+
+    end subroutine disc_finalize
+
+    ! **********************************
     subroutine disc_create(this)
 
         ! Create a disc structure
